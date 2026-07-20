@@ -110,11 +110,14 @@ pull request against `main`, on Python 3.12 and 3.13.
 
 **Foundation stage.** Implemented so far: `core` (exceptions, the
 `ServiceContainer` DI container, structured logging, and the `Kernel`
-runtime/lifecycle) and `config` (`KernelConfig`, `Environment`,
-`load_config`) — see [`docs/specs/`](docs/specs/README.md) for their public
-contracts. `agents`, `workflow`, `memory`, `tools`, `events`, `plugins`, and
-`providers` remain unimplemented package skeletons. Subsystems are
-implemented one at a time; do not depend on this repository for production
+runtime/lifecycle), `config` (`KernelConfig`, `Environment`, `load_config`),
+and `providers` (the `BaseProvider` contract, `ProviderRegistry`,
+`ProviderFactory` — interfaces and registry only, no concrete OpenAI/
+Anthropic/Gemini/local-model integration) — see
+[`docs/specs/`](docs/specs/README.md) for their public contracts. `agents`,
+`workflow`, `memory`, `tools`, `events`, and `plugins` remain unimplemented
+package skeletons. Subsystems are implemented one at a time; do not depend
+on this repository for production
 use yet.
 
 ## Contributing

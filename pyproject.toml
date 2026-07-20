@@ -72,5 +72,5 @@ files = ["src", "tests"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers --import-mode=importlib"
 testpaths = ["tests"]
