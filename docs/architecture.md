@@ -1,0 +1,151 @@
+# Mellivor Kernel — High-Level Architecture
+
+Status: Foundation. This document describes the intended shape of the kernel.
+Subsystems described here are design targets, not yet implementations.
+
+This document reflects the scope decision recorded in
+[ADR-0002](adr/0002-ai-enterprise-kernel-scope-and-subsystems.md). Read that
+ADR for the full rationale; this document tracks its current-state summary.
+
+## What the kernel is
+
+Mellivor Kernel is an **AI Enterprise Kernel**, not a software development
+framework. Its purpose is to power enterprise AI applications — starting with
+Mellivor One — by providing the AI substrate those applications are built on.
+
+## What the kernel is not
+
+The kernel is strictly **business-agnostic**. It must never contain CRM,
+Legal, HR, Finance, Security, or any other business/domain logic. That logic
+always lives in external, consuming applications. Nothing in this repository
+should assume, encode, or special-case any business vertical.
+
+## Guiding principles
+
+1. **AI Enterprise Kernel, not a framework.** The kernel exists to power
+   enterprise AI applications, not to be a general-purpose application
+   framework. Capabilities are added because an enterprise AI application
+   needs them from the kernel specifically, not because they would be
+   generically useful.
+2. **Business-agnostic, always.** No CRM, Legal, HR, Finance, Security, or
+   other domain logic, ever — regardless of how small or temporary it is
+   claimed to be. See ADR-0002.
+3. **Provider-agnostic core.** Nothing outside `providers/` may depend
+   directly on a specific model provider, vector database, or external
+   SaaS. `providers/` is the only place provider-specific code is allowed to
+   live.
+4. **Contracts before implementations.** Each subsystem is defined first by
+   its interface/contract, documented via an ADR and/or spec, before any
+   concrete implementation is added.
+5. **Composability over configuration sprawl.** Products assemble kernel
+   subsystems as building blocks rather than fighting a monolithic
+   framework.
+6. **Observability is not optional.** Every subsystem is expected to be
+   inspectable (logs, traces, metrics, audit events) once the observability
+   subsystem is designed, rather than inventing its own instrumentation.
+7. **Minimal surface area.** The kernel grows by deliberate, documented
+   decisions (ADRs), not by accretion. The current fixed list of kernel
+   responsibilities is enumerated below; nothing outside it belongs in the
+   kernel without a new ADR expanding it.
+
+## Kernel responsibilities
+
+Per ADR-0002, the kernel's responsibilities are limited to exactly:
+
+- AI orchestration
+- Agent lifecycle
+- Workflow engine
+- Memory abstraction
+- Tool execution
+- Event bus
+- Plugin loading
+- Multi-LLM provider abstraction
+- Configuration
+- Observability
+- Security primitives
+
+## Subsystems (`src/mellivor_kernel/`)
+
+```
+                 ┌─────────────────────────────┐
+                 │             core             │
+                 │   lifecycle, contracts,      │
+                 │   dependency boundaries      │
+                 └───────────────┬───────────────┘
+                                  │
+   ┌─────────┬─────────┬─────────┼─────────┬─────────┬─────────┐
+   │          │          │         │          │          │          │
+┌──▼───┐ ┌───▼────┐ ┌───▼───┐ ┌──▼───┐ ┌───▼────┐ ┌───▼───┐ ┌───▼───┐
+│agents│ │workflow│ │memory │ │tools │ │ events │ │plugins│ │ config│
+└──┬───┘ └───┬────┘ └───┬───┘ └──┬───┘ └───┬────┘ └───┬───┘ └───┬───┘
+   │          │          │         │          │          │          │
+   └──────────┴──────────┴────┬────┴──────────┴──────────┴──────────┘
+                                │
+                          ┌─────▼──────┐
+                          │  providers  │
+                          │ (multi-LLM, │
+                          │  external   │
+                          │  systems)   │
+                          └─────────────┘
+```
+
+- **`core`** — Kernel bootstrapping and lifecycle, shared contracts/types,
+  dependency-injection boundaries. The only subsystem every other subsystem
+  may depend on.
+
+- **`agents`** — Agent lifecycle: creation, state, execution, and teardown of
+  individual AI agents, independent of any single model provider.
+
+- **`workflow`** — The workflow engine: composing agents and tools into
+  multi-step processes, including routing and scheduling of that work.
+
+- **`memory`** — Memory abstraction: contracts for short-term
+  (session/conversation) and long-term (persistent, retrievable) memory,
+  without committing to a specific store.
+
+- **`tools`** — Tool execution: registration, invocation, input/output
+  schemas, and execution boundaries (including sandboxing concerns) for
+  anything the kernel can call out to.
+
+- **`events`** — The event bus: publish/subscribe primitives used for
+  communication between kernel subsystems and, indirectly, between agents
+  and workflows.
+
+- **`plugins`** — Plugin loading: discovery, registration, and lifecycle of
+  pluggable extensions to the kernel.
+
+- **`config`** — Configuration: contracts for configuration and environment
+  loading (including feature flags), kept separate so products can supply
+  their own configuration sources without the kernel assuming any one
+  mechanism.
+
+- **`providers`** — Multi-LLM provider abstraction: pluggable integrations to
+  model providers and related external systems. This is the only place
+  provider-specific code is allowed to live; providers implement contracts
+  defined by the other subsystems and are swappable and independently
+  versioned.
+
+### Partially placed: Observability. Not yet placed: Security primitives
+
+Structured logging — the first slice of the Observability responsibility —
+is implemented in `core/logging.py` (Sprint 2), using the fallback ADR-0002
+itself anticipated ("hosted inside `core/`") rather than a new top-level
+package. Tracing, metrics, and audit trail remain unaddressed.
+
+Security primitives do not yet have any implementation or placement. This
+remains a deliberate open point, not an omission — see ADR-0002. A future
+ADR will decide whether Security (and the rest of Observability) become
+their own top-level package(s) or continue to be hosted inside `core/`.
+
+## Consumption model
+
+Products — Mellivor One, and future enterprise products — depend on the
+kernel as a library: they compose kernel subsystems and supply providers for
+the model(s) they need. Business logic, UI, and domain modules live entirely
+in the consuming product, never in this repository.
+
+## How this document evolves
+
+Changes to subsystem boundaries, the kernel's responsibility list, or the
+principles above should be proposed and recorded as an ADR in
+[`docs/adr/`](adr/README.md) before this document is updated to match.
