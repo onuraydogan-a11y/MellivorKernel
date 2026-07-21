@@ -52,8 +52,12 @@ for the full scope decision behind this vision.
 ## Architecture
 
 See [`docs/architecture.md`](docs/architecture.md) for the high-level design:
-the kernel's subsystems, how they relate, and the principles governing how the
-kernel evolves.
+the kernel's subsystems and how they relate.
+
+- [`docs/architecture/principles.md`](docs/architecture/principles.md) —
+  the kernel's guiding principles.
+- [`docs/architecture/roadmap.md`](docs/architecture/roadmap.md) — the
+  current sprint roadmap.
 
 Architecturally significant decisions are recorded as ADRs in
 [`docs/adr/`](docs/adr/README.md).
@@ -75,6 +79,7 @@ src/mellivor_kernel/
     config/          Configuration
     providers/       Multi-LLM provider abstraction
 docs/architecture.md  High-level architecture
+docs/architecture/    Principles and roadmap
 docs/adr/            Architecture Decision Records
 docs/specs/           Detailed subsystem specifications
 docs/diagrams/        Supporting diagrams

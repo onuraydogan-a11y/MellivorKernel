@@ -22,31 +22,9 @@ should assume, encode, or special-case any business vertical.
 
 ## Guiding principles
 
-1. **AI Enterprise Kernel, not a framework.** The kernel exists to power
-   enterprise AI applications, not to be a general-purpose application
-   framework. Capabilities are added because an enterprise AI application
-   needs them from the kernel specifically, not because they would be
-   generically useful.
-2. **Business-agnostic, always.** No CRM, Legal, HR, Finance, Security, or
-   other domain logic, ever — regardless of how small or temporary it is
-   claimed to be. See ADR-0002.
-3. **Provider-agnostic core.** Nothing outside `providers/` may depend
-   directly on a specific model provider, vector database, or external
-   SaaS. `providers/` is the only place provider-specific code is allowed to
-   live.
-4. **Contracts before implementations.** Each subsystem is defined first by
-   its interface/contract, documented via an ADR and/or spec, before any
-   concrete implementation is added.
-5. **Composability over configuration sprawl.** Products assemble kernel
-   subsystems as building blocks rather than fighting a monolithic
-   framework.
-6. **Observability is not optional.** Every subsystem is expected to be
-   inspectable (logs, traces, metrics, audit events) once the observability
-   subsystem is designed, rather than inventing its own instrumentation.
-7. **Minimal surface area.** The kernel grows by deliberate, documented
-   decisions (ADRs), not by accretion. The current fixed list of kernel
-   responsibilities is enumerated below; nothing outside it belongs in the
-   kernel without a new ADR expanding it.
+See [`docs/architecture/principles.md`](architecture/principles.md) for the
+kernel's guiding principles (moved there in Sprint 5's docs
+reorganization).
 
 ## Kernel responsibilities
 
@@ -168,5 +146,6 @@ than being something each consuming product had to hand-roll itself.
 ## How this document evolves
 
 Changes to subsystem boundaries, the kernel's responsibility list, or the
-principles above should be proposed and recorded as an ADR in
-[`docs/adr/`](adr/README.md) before this document is updated to match.
+principles in [`docs/architecture/principles.md`](architecture/principles.md)
+should be proposed and recorded as an ADR in [`docs/adr/`](adr/README.md)
+before this document is updated to match.
