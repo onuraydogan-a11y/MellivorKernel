@@ -12,3 +12,4 @@ Specs are added as each kernel subsystem is designed and implemented:
 - [`core.md`](core.md)
 - [`config.md`](config.md)
 - [`providers.md`](providers.md)
+- [`tools.md`](tools.md)
