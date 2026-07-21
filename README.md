@@ -113,11 +113,14 @@ pull request against `main`, on Python 3.12 and 3.13.
 runtime/lifecycle), `config` (`KernelConfig`, `Environment`, `load_config`),
 `providers` (the `BaseProvider` contract, `ProviderRegistry`,
 `ProviderFactory` — interfaces and registry only, no concrete OpenAI/
-Anthropic/Gemini/local-model integration), and `tools` (the `BaseTool`
+Anthropic/Gemini/local-model integration), `tools` (the `BaseTool`
 contract, `ToolRegistry`, the permission model, and the
 `ToolExecutionPipeline`, plus three demonstration tools —
-`EchoTool`/`HealthCheckTool`/`VersionTool` — that call no external API) —
-see [`docs/specs/`](docs/specs/README.md) for their public contracts.
+`EchoTool`/`HealthCheckTool`/`VersionTool` — that call no external API),
+and `bootstrap` (`KernelBootstrap`, `BootstrapBuilder`, and the read-only
+`RuntimeContext` — the composition layer that assembles the other four
+subsystems into a running kernel) — see
+[`docs/specs/`](docs/specs/README.md) for their public contracts.
 `agents`, `workflow`, `memory`, `events`, and `plugins` remain unimplemented
 package skeletons. Subsystems are implemented one at a time; do not depend
 on this repository for production

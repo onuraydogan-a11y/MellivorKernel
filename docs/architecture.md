@@ -137,12 +137,33 @@ remains a deliberate open point, not an omission — see ADR-0002. A future
 ADR will decide whether Security (and the rest of Observability) become
 their own top-level package(s) or continue to be hosted inside `core/`.
 
+## The composition layer (`src/mellivor_kernel/bootstrap/`)
+
+`core` owns the kernel runtime's own bootstrap/lifecycle sequence
+(`core.runtime.Kernel.start()`/`.shutdown()`), consistent with its
+description above. Composing multiple subsystems together into one running
+kernel is a distinct, higher-level concern that cannot live inside `core`
+(or any single subsystem) without that subsystem depending on its siblings
+— which would break the acyclic dependency graph the subsystems otherwise
+maintain (`core` depends on nothing else; `config`/`providers`/`tools` each
+depend only on `core`).
+
+`bootstrap` is a top-level package, a peer to the subsystems above rather
+than one of them, that assembles `config` + `core` + `providers` + `tools`
+into a running kernel (`KernelBootstrap`, `BootstrapBuilder`) and exposes a
+read-only view of the result (`RuntimeContext`) to consumers. It is not a
+new kernel *responsibility* under the list above — it composes
+responsibilities that already exist — so its addition did not require
+amending that list.
+
 ## Consumption model
 
 Products — Mellivor One, and future enterprise products — depend on the
 kernel as a library: they compose kernel subsystems and supply providers for
 the model(s) they need. Business logic, UI, and domain modules live entirely
-in the consuming product, never in this repository.
+in the consuming product, never in this repository. As of Sprint 5, this
+composition has a concrete mechanism — `mellivor_kernel.bootstrap` — rather
+than being something each consuming product had to hand-roll itself.
 
 ## How this document evolves
 
