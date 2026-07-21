@@ -78,6 +78,7 @@ src/mellivor_kernel/
     plugins/         Plugin loading
     config/          Configuration
     providers/       Multi-LLM provider abstraction
+    bootstrap/       Composition layer: assembles core/config/providers/tools
 docs/architecture.md  High-level architecture
 docs/architecture/    Principles and roadmap
 docs/adr/            Architecture Decision Records
