@@ -74,8 +74,15 @@ Per ADR-0002, the kernel's responsibilities are limited to exactly:
 - **`agents`** — Agent lifecycle: creation, state, execution, and teardown of
   individual AI agents, independent of any single model provider.
 
-- **`workflow`** — The workflow engine: composing agents and tools into
-  multi-step processes, including routing and scheduling of that work.
+- **`workflow`** — The workflow engine: composing multiple execution steps
+  into a sequential process. Implemented in Sprint 12 (`Workflow`,
+  `WorkflowDefinition`, `WorkflowStep`, `WorkflowEngine`) — like `events`
+  and `memory` before it, this responsibility already had its designated
+  package from ADR-0002; Sprint 12 only filled it in. Composes calls to
+  `execution.ExecutionEngine` only — it never touches a tool or provider
+  directly, and no scheduling, cron, or parallel steps are implemented.
+  See [`docs/specs/workflow.md`](specs/workflow.md) and
+  [ADR-0010](adr/0010-workflow-engine-and-orchestration-boundary.md).
 
 - **`memory`** — Memory abstraction: contracts for short-term
   (session/conversation) and long-term (persistent, retrievable) memory,
@@ -215,6 +222,12 @@ As of Sprint 9, `authorization` also publishes `AuthorizationGranted`/
 uses — a normal dependency on generic infrastructure, not the kind of
 coupling ADR-0007 inverted away from, since `events` carries no decision
 logic. See [ADR-0008](adr/0008-event-bus-and-lifecycle-events.md).
+
+As of Sprint 12, `workflow` sits above all of the above, composing
+sequential `execution.ExecutionEngine.execute()` calls — it never
+touches a tool, provider, or `Dispatcher` directly, and `execution` has
+no dependency back on it. See [`docs/specs/workflow.md`](specs/workflow.md)
+and [ADR-0010](adr/0010-workflow-engine-and-orchestration-boundary.md).
 
 ## Consumption model
 

@@ -156,11 +156,17 @@ implementation; see
 `InMemoryStore` — text-only memory as kernel infrastructure, with no
 dependency on any provider; `execution` may optionally record execution
 outcomes through it; see
-[ADR-0009](docs/adr/0009-memory-subsystem-and-execution-recording.md)) —
+[ADR-0009](docs/adr/0009-memory-subsystem-and-execution-recording.md)),
+and `workflow` (`Workflow`, `WorkflowDefinition`, `WorkflowStep`,
+`WorkflowContext`, `WorkflowEngine`, `WorkflowResult` — composes
+sequential multi-step runs by delegating every step to `ExecutionEngine`;
+never touches a tool or provider directly, and `execution` has no
+dependency back on it; see
+[ADR-0010](docs/adr/0010-workflow-engine-and-orchestration-boundary.md)) —
 see [`docs/specs/`](docs/specs/README.md) for their public contracts.
-`agents`, `workflow`, and `plugins` remain unimplemented package
-skeletons. Subsystems are implemented one at a time; do not depend on this
-repository for production
+`agents` and `plugins` remain unimplemented package skeletons. Subsystems
+are implemented one at a time; do not depend on this repository for
+production
 use yet.
 
 ## Contributing

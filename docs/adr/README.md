@@ -39,3 +39,4 @@ Small, local, easily reversible choices do not need an ADR.
 | [0007](0007-authorization-engine-and-execution-decoupling.md) | Authorization Engine, decoupled from Execution Core via a structural contract | Accepted |
 | [0008](0008-event-bus-and-lifecycle-events.md) | Event Bus, and lifecycle events published by Execution and Authorization | Accepted |
 | [0009](0009-memory-subsystem-and-execution-recording.md) | Memory subsystem, and execution recording through it | Accepted |
+| [0010](0010-workflow-engine-and-orchestration-boundary.md) | Workflow Engine, and the orchestration/execution boundary | Accepted |

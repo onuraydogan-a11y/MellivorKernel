@@ -7,7 +7,7 @@ as a living document rather than frozen inside one release's notes.
 release actually shipped; this file is where roadmap content should be
 updated going forward.
 
-Status as of Sprint 11: Sprints 1–5 shipped `core`, `config`, `providers`
+Status as of Sprint 12: Sprints 1–5 shipped `core`, `config`, `providers`
 (interfaces only, no concrete implementation), `tools`, and `bootstrap`.
 Sprint 6 shipped `execution` (Execution Core) — see
 [ADR-0006](../adr/0006-execution-core-orchestration-layer.md). Sprint 7 was
@@ -34,9 +34,15 @@ abstraction (`Memory`, `MemoryStore`, `MemoryEntry`, `MemoryQuery`,
 `MemoryResult`, `InMemoryStore`) — text memory only, no embeddings/vector/
 RAG — and wired `ExecutionEngine` to optionally record execution outcomes
 through it, with no dependency in either direction on any provider — see
-[ADR-0009](../adr/0009-memory-subsystem-and-execution-recording.md). This
-time the recommended slot held; no re-sequencing. What follows is the
-approved recommendation for the remaining sprints.
+[ADR-0009](../adr/0009-memory-subsystem-and-execution-recording.md). Sprint
+12 shipped the workflow engine (`Workflow`, `WorkflowDefinition`,
+`WorkflowStep`, `WorkflowContext`, `WorkflowEngine`, `WorkflowResult`) —
+re-sequenced ahead of both plugin loading and agent lifecycle originally
+recommended for slots 12–13, composing sequential `ExecutionEngine` calls
+with no dependency back from `execution`/`authorization`/`memory`/`events`
+— see
+[ADR-0010](../adr/0010-workflow-engine-and-orchestration-boundary.md).
+What follows is the approved recommendation for the remaining sprints.
 
 Recommendation, not a decision — architecture and sprint sequencing remain
 the user's to set. Based on the dependency shape already visible in
@@ -51,18 +57,19 @@ first, `agents`/`workflow` last since they're consumers of everything else.
 | 9 | **Event bus** (`events`), shipped | No dependencies beyond `core`; every later subsystem plausibly wants to publish/subscribe to lifecycle and state events — `execution` and `authorization` both do so immediately. Also the natural backbone for future tracing/audit work. |
 | 10 | ~~Memory abstraction (`memory`)~~ → **First concrete provider** (`providers.claude.ClaudeProvider`), shipped | Re-sequenced ahead of memory: validates `BaseProvider` against a real LLM (Anthropic) while the contract is still cheap to change if it had needed to be — before `agents`/`memory` are built assuming a shape that turned out wrong. It didn't need to change. |
 | 11 | **Memory abstraction** (`memory`), shipped | No dependencies beyond `core`; needed by `agents` for state/context persistence, and now proven usable by `execution` for recording outcomes without any provider dependency in either direction. |
+| 12 | ~~Plugin loading (`plugins`)~~ → **Workflow engine** (`workflow`), shipped | Re-sequenced ahead of plugin loading and agent lifecycle: composes `execution`/`memory`/`events` (all already shipped) into sequential multi-step runs, proving the orchestration/execution boundary (ADR-0010) before `agents` is built on top of either. |
 
-**Beyond sprint 11 (not scheduled):** **Plugin loading** (`plugins`, no
+**Beyond sprint 12 (not scheduled):** **Plugin loading** (`plugins`, no
 dependencies beyond `core`, benefits from `events` already existing),
 **Agent lifecycle** (`agents`, depends on `providers`, `tools`,
-`execution`, `authorization`, `memory`, `events`), the **workflow engine**
-(`workflow`, depends on `agents`/`tools`/`events` — naturally last),
-additional concrete providers (OpenAI, Gemini, Ollama — explicitly out of
-scope for Sprint 10), a provider-side memory-consumption mechanism (a
-provider reading prior memory as conversation context — deliberately not
-built in Sprint 11, left for when `agents`/`workflow` establish a real
-multi-turn use case), embeddings/vector search/RAG for `memory`, the
-remainder of **Security primitives** (secrets management, encryption,
-audit trail), and the remainder of **observability** (tracing, metrics,
-and building on top of `events` for a trace/audit consumer) — all still
-open per ADR-0002, with no placement decided.
+`execution`, `authorization`, `memory`, `events`, and now `workflow` for
+multi-step composition), additional concrete providers (OpenAI, Gemini,
+Ollama — explicitly out of scope for Sprint 10), a provider-side
+memory-consumption mechanism (a provider reading prior memory as
+conversation context), dynamic workflow steps (a step's request built
+from an earlier step's result — deliberately not built in Sprint 12),
+parallel/scheduled workflow execution, embeddings/vector search/RAG for
+`memory`, the remainder of **Security primitives** (secrets management,
+encryption, audit trail), and the remainder of **observability** (tracing,
+metrics, and building on top of `events` for a trace/audit consumer) —
+all still open per ADR-0002, with no placement decided.
