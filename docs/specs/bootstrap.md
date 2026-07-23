@@ -105,6 +105,7 @@ A read-only view of a bootstrapped runtime, and the **only** object
 .provider_registry -> ProviderRegistry
 .tool_registry -> ToolRegistry
 .tool_context(*, logger_name: str = "tools") -> ToolContext
+.execution_context(*, logger_name: str = "execution") -> ExecutionContext
 ```
 
 **Deliberately excluded:** there is no way to retrieve the wrapped `Kernel`
@@ -143,17 +144,32 @@ but is never returned to, or reachable by, the caller. `ToolContext` itself
 was not changed in any way; this is a new constructor path added entirely
 within `bootstrap`.
 
+### The same gap, again: `execution_context()` (Sprint 7)
+
+Sprint 7's Execution Core integration gate hit the identical problem one
+level up: `execution.ExecutionContext.runtime` also requires a real
+`core.runtime.Kernel`, and there was no supported way to build one from a
+bootstrapped `RuntimeContext` — the only alternative would have been
+hand-constructing a second `Kernel` outside of bootstrap, defeating the
+point of bootstrapping in the first place.
+
+`RuntimeContext.execution_context()` closes it the same way
+`tool_context()` did: a factory method using the private `Kernel`
+reference internally, added without changing `ExecutionContext` or any
+other existing symbol. `bootstrap` now depends on `execution` as well (see
+below) — an additive dependency, not a change to any existing contract.
+
 ## Dependency relationship
 
 ```
-bootstrap → core, config, providers, tools
+bootstrap → core, config, providers, tools, execution
 ```
 
-`bootstrap` is the only package in the repository that depends on all four.
-None of `core`, `config`, `providers`, or `tools` depend on `bootstrap` (and
-must never — that would be circular). `agents`, `workflow`, `memory`,
-`events`, and `plugins` remain untouched, unimplemented, and unreferenced by
-`bootstrap`.
+`bootstrap` is the only package in the repository that depends on all five.
+None of `core`, `config`, `providers`, `tools`, or `execution` depend on
+`bootstrap` (and must never — that would be circular). `agents`, `workflow`,
+`memory`, `events`, and `plugins` remain untouched, unimplemented, and
+unreferenced by `bootstrap`.
 
 ## Compliance with this sprint's constraints
 

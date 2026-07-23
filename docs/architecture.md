@@ -142,7 +142,10 @@ into a running kernel (`KernelBootstrap`, `BootstrapBuilder`) and exposes a
 read-only view of the result (`RuntimeContext`) to consumers. It is not a
 new kernel *responsibility* under the list above — it composes
 responsibilities that already exist — so its addition did not require
-amending that list.
+amending that list. As of Sprint 7, `RuntimeContext` also builds an
+`execution.ExecutionContext` (`.execution_context()`), the same way it
+already built a `tools.ToolContext` (`.tool_context()`) — see
+[`docs/specs/bootstrap.md`](specs/bootstrap.md).
 
 ## The execution layer (`src/mellivor_kernel/execution/`)
 
