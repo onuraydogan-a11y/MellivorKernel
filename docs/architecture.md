@@ -79,7 +79,13 @@ Per ADR-0002, the kernel's responsibilities are limited to exactly:
 
 - **`memory`** — Memory abstraction: contracts for short-term
   (session/conversation) and long-term (persistent, retrievable) memory,
-  without committing to a specific store.
+  without committing to a specific store. Implemented in Sprint 11
+  (`Memory`, `MemoryStore`, `InMemoryStore`) for **text memory only** —
+  no embeddings, vector database, semantic search, RAG, or persistence
+  yet. Like `events` in Sprint 9, this responsibility already had its
+  designated package from ADR-0002; Sprint 11 only filled it in. See
+  [`docs/specs/memory.md`](specs/memory.md) and
+  [ADR-0009](adr/0009-memory-subsystem-and-execution-recording.md).
 
 - **`tools`** — Tool execution: registration, invocation, input/output
   schemas, and execution boundaries (including sandboxing concerns) for
@@ -183,7 +189,12 @@ Sprint 8, authorization is no longer future work (see below), but
 publishes its own lifecycle events (`ExecutionStarted`, `ExecutionCompleted`,
 `ExecutionFailed`) to an injected `events.EventBus` — see
 [ADR-0008](adr/0008-event-bus-and-lifecycle-events.md) — but still depends
-only on the abstract bus, never a concrete implementation.
+only on the abstract bus, never a concrete implementation. As of Sprint
+11, `execution` optionally records each outcome to an injected
+`memory.MemoryStore` — see
+[ADR-0009](adr/0009-memory-subsystem-and-execution-recording.md) — the
+only new dependency this adds is on `memory` itself, never on any
+provider it might one day inform.
 
 ## The authorization layer (`src/mellivor_kernel/authorization/`)
 

@@ -17,3 +17,4 @@ Specs are added as each kernel subsystem is designed and implemented:
 - [`execution.md`](execution.md)
 - [`authorization.md`](authorization.md)
 - [`events.md`](events.md)
+- [`memory.md`](memory.md)

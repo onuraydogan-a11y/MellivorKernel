@@ -1,7 +1,7 @@
 # `execution` subsystem spec
 
 Status: Implemented (Sprint 6; authorization wired in Sprint 8; events in
-Sprint 9).
+Sprint 9; memory recording in Sprint 11).
 
 Public contract exported from `mellivor_kernel.execution`. Anything not
 listed here is internal and carries no compatibility guarantee, per
@@ -9,9 +9,11 @@ listed here is internal and carries no compatibility guarantee, per
 [ADR-0006](../adr/0006-execution-core-orchestration-layer.md) for why this
 subsystem exists,
 [ADR-0007](../adr/0007-authorization-engine-and-execution-decoupling.md)
-for how it consults authorization without depending on it, and
+for how it consults authorization without depending on it,
 [ADR-0008](../adr/0008-event-bus-and-lifecycle-events.md) for its
-published events.
+published events, and
+[ADR-0009](../adr/0009-memory-subsystem-and-execution-recording.md) for
+how it records to memory.
 
 ## Exceptions
 
@@ -192,6 +194,7 @@ def __init__(
     *,
     authorizer: Authorizer | None = None,
     event_bus: EventBus | None = None,
+    memory: MemoryStore | None = None,
 ) -> None
 
 def execute(
@@ -205,7 +208,8 @@ def execute(
 
 Flow: `ExecutionRequest -> Authorization -> Dispatcher -> Tool/Provider ->
 ExecutionResult`, with `ExecutionStarted`/`ExecutionCompleted`/
-`ExecutionFailed` published around it when `event_bus` is configured.
+`ExecutionFailed` published around it when `event_bus` is configured, and
+each outcome recorded to `memory` when configured.
 
 - Logs the start of execution and publishes `ExecutionStarted`.
 - If `authorizer` is configured, calls
@@ -220,11 +224,17 @@ ExecutionResult`, with `ExecutionStarted`/`ExecutionCompleted`/
   configured, an empty set is always forwarded, identical to this
   engine's behavior before Sprint 8.
 - Logs the outcome (`INFO` on success, `WARNING` on failure), publishes
-  `ExecutionCompleted` or `ExecutionFailed` accordingly, and returns the
-  result unchanged.
+  `ExecutionCompleted` or `ExecutionFailed` accordingly.
+- If `memory` is configured, records the outcome as a `MemoryEntry` keyed
+  by `request.request_id` (see `docs/specs/memory.md`) — for both success
+  and failure, including an authorization denial. A memory backend
+  exception is caught and logged, never propagated.
+- Returns the result unchanged.
 
 With `event_bus=None` (the default), no events are ever published —
-identical to this engine's behavior before Sprint 9.
+identical to this engine's behavior before Sprint 9. With `memory=None`
+(the default), nothing is ever recorded — identical to this engine's
+behavior before Sprint 11.
 
 Performs no validation of its own beyond what `ExecutionRequest` already
 enforces at construction, and no retries or workflow composition — see
@@ -236,7 +246,8 @@ ADR-0006/ADR-0007 for why each is explicitly out of scope.
 depends on), `tools` (`ToolRegistry`, `ToolExecutionPipeline`, `ToolContext`,
 `ToolRegistrationError`, `ToolValidationError`, `Permission`), `providers`
 (`ProviderRegistry`, `ProviderRegistrationError`) — all three only inside
-`dispatch.py` — and `events` (`Event`, `EventBus`). `core`, `tools`,
-`providers`, and `events` have no dependency on `execution`. `authorization`
-depends on `execution` (not the other way around) — see
+`dispatch.py` — `events` (`Event`, `EventBus`), and `memory`
+(`MemoryEntry`, `MemoryStore`). `core`, `tools`, `providers`, `events`, and
+`memory` have no dependency on `execution`. `authorization` depends on
+`execution` (not the other way around) — see
 `docs/specs/authorization.md`.

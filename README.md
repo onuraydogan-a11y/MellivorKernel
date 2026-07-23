@@ -146,14 +146,19 @@ Provider Runtime; see
 whether an execution request is authorized, consulted by `ExecutionEngine`
 through a structural contract it never imports `authorization` to use; see
 [ADR-0007](docs/adr/0007-authorization-engine-and-execution-decoupling.md)),
-and `events` (`Event`, `EventBus`, `InMemoryEventBus`, `EventHandler`,
+`events` (`Event`, `EventBus`, `InMemoryEventBus`, `EventHandler`,
 `EventRegistration` — an in-process publish/subscribe abstraction, not a
 distributed messaging system; `execution` and `authorization` both publish
 lifecycle events through it without depending on any concrete
 implementation; see
-[ADR-0008](docs/adr/0008-event-bus-and-lifecycle-events.md)) — see
-[`docs/specs/`](docs/specs/README.md) for their public contracts.
-`agents`, `workflow`, `memory`, and `plugins` remain unimplemented package
+[ADR-0008](docs/adr/0008-event-bus-and-lifecycle-events.md)), and `memory`
+(`Memory`, `MemoryStore`, `MemoryEntry`, `MemoryQuery`, `MemoryResult`,
+`InMemoryStore` — text-only memory as kernel infrastructure, with no
+dependency on any provider; `execution` may optionally record execution
+outcomes through it; see
+[ADR-0009](docs/adr/0009-memory-subsystem-and-execution-recording.md)) —
+see [`docs/specs/`](docs/specs/README.md) for their public contracts.
+`agents`, `workflow`, and `plugins` remain unimplemented package
 skeletons. Subsystems are implemented one at a time; do not depend on this
 repository for production
 use yet.
