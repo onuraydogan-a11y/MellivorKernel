@@ -1,7 +1,14 @@
 # Mellivor Kernel — High-Level Architecture
 
-Status: Foundation. This document describes the intended shape of the kernel.
-Subsystems described here are design targets, not yet implementations.
+Status: Release Candidate (v0.13.0). `core`, `config`, `tools`,
+`providers` (interfaces plus the `ClaudeProvider` reference
+implementation), `bootstrap`, `execution`, `authorization`, `events`,
+`memory`, `workflow`, and a first slice of `agents` are implemented — see
+each subsystem's entry below and its own spec in `docs/specs/` for what
+"implemented" covers and excludes. `plugins` remains an unimplemented
+skeleton; Security primitives and most of Observability remain
+unaddressed. See `docs/release/v1.0-release-checklist.md` for the full
+release-readiness assessment.
 
 This document reflects the scope decision recorded in
 [ADR-0002](adr/0002-ai-enterprise-kernel-scope-and-subsystems.md). Read that

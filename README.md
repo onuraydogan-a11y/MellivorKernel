@@ -47,7 +47,10 @@ for the full scope decision behind this vision.
 - Not a CRM, Legal, HR, Finance, Security, or any other business application.
 - Not a UI.
 - Not a home for business modules or product-specific logic.
-- Not, at this stage, a working implementation — see [Status](#status) below.
+- Not yet a complete implementation of every responsibility in
+  [ADR-0002](docs/adr/0002-ai-enterprise-kernel-scope-and-subsystems.md)
+  — see [Status](#status) below for exactly what is and isn't
+  implemented.
 
 ## Architecture
 
@@ -87,7 +90,7 @@ docs/adr/            Architecture Decision Records
 docs/specs/           Detailed subsystem specifications
 docs/diagrams/        Supporting diagrams
 tests/                Test suite (mirrors src/mellivor_kernel structure)
-examples/             Minimal usage examples, once the kernel exists
+examples/             Minimal, runnable usage examples per subsystem
 scripts/              Developer/maintenance scripts
 .github/workflows/    CI
 pyproject.toml         Package metadata, ruff/mypy/pytest configuration
@@ -123,7 +126,17 @@ pull request against `main`, on Python 3.12 and 3.13.
 
 ## Status
 
-**Foundation stage.** Implemented so far: `core` (exceptions, the
+**Release Candidate (v0.13.0).** Not yet `1.0.0` — per
+[ADR-0005](docs/adr/0005-versioning-strategy.md), that version number is
+reserved for an explicit future decision once every responsibility in
+ADR-0002 is stable, which is not yet the case (`plugins` is unimplemented;
+`agents` is a first, deliberately minimal slice; Security primitives and
+most of Observability remain unaddressed). See
+[`docs/release/v1.0-release-checklist.md`](docs/release/v1.0-release-checklist.md)
+for the complete release-readiness assessment, including known
+limitations.
+
+Implemented so far: `core` (exceptions, the
 `ServiceContainer` DI container, structured logging, and the `Kernel`
 runtime/lifecycle), `config` (`KernelConfig`, `Environment`, `load_config`),
 `providers` (the `BaseProvider` contract, `ProviderRegistry`,
@@ -170,10 +183,11 @@ and a first, deliberately minimal slice of `agents` — Agent Runtime Core
 composition yet; see
 [ADR-0011](docs/adr/0011-agent-runtime-core-and-orchestration-chain.md)) —
 see [`docs/specs/`](docs/specs/README.md) for their public contracts.
-`plugins` remains an unimplemented package skeleton. Subsystems are
-implemented one at a time; do not depend on this repository for
-production
-use yet.
+`plugins` remains an unimplemented package skeleton. Bootstrap does not
+yet wire the newer engines (`ExecutionEngine`, `AuthorizationEngine`,
+`WorkflowEngine`, `AgentEngine`) together automatically — a consumer
+composes them explicitly, as every example in [`examples/`](examples/)
+does.
 
 ## Contributing
 
