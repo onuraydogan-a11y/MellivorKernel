@@ -157,15 +157,21 @@ implementation; see
 dependency on any provider; `execution` may optionally record execution
 outcomes through it; see
 [ADR-0009](docs/adr/0009-memory-subsystem-and-execution-recording.md)),
-and `workflow` (`Workflow`, `WorkflowDefinition`, `WorkflowStep`,
+`workflow` (`Workflow`, `WorkflowDefinition`, `WorkflowStep`,
 `WorkflowContext`, `WorkflowEngine`, `WorkflowResult` — composes
 sequential multi-step runs by delegating every step to `ExecutionEngine`;
 never touches a tool or provider directly, and `execution` has no
 dependency back on it; see
-[ADR-0010](docs/adr/0010-workflow-engine-and-orchestration-boundary.md)) —
+[ADR-0010](docs/adr/0010-workflow-engine-and-orchestration-boundary.md)),
+and a first, deliberately minimal slice of `agents` — Agent Runtime Core
+(`Agent`, `AgentDefinition`, `AgentContext`, `AgentEngine`, `AgentResult`
+— an agent invokes exactly one workflow by delegating entirely to
+`WorkflowEngine`; no planning, reasoning, reflection, or multi-agent
+composition yet; see
+[ADR-0011](docs/adr/0011-agent-runtime-core-and-orchestration-chain.md)) —
 see [`docs/specs/`](docs/specs/README.md) for their public contracts.
-`agents` and `plugins` remain unimplemented package skeletons. Subsystems
-are implemented one at a time; do not depend on this repository for
+`plugins` remains an unimplemented package skeleton. Subsystems are
+implemented one at a time; do not depend on this repository for
 production
 use yet.
 

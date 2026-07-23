@@ -7,7 +7,7 @@ as a living document rather than frozen inside one release's notes.
 release actually shipped; this file is where roadmap content should be
 updated going forward.
 
-Status as of Sprint 12: Sprints 1–5 shipped `core`, `config`, `providers`
+Status as of Sprint 13A: Sprints 1–5 shipped `core`, `config`, `providers`
 (interfaces only, no concrete implementation), `tools`, and `bootstrap`.
 Sprint 6 shipped `execution` (Execution Core) — see
 [ADR-0006](../adr/0006-execution-core-orchestration-layer.md). Sprint 7 was
@@ -42,6 +42,13 @@ recommended for slots 12–13, composing sequential `ExecutionEngine` calls
 with no dependency back from `execution`/`authorization`/`memory`/`events`
 — see
 [ADR-0010](../adr/0010-workflow-engine-and-orchestration-boundary.md).
+Sprint 13A shipped a first, deliberately minimal slice of `agents` — Agent
+Runtime Core (`Agent`, `AgentDefinition`, `AgentContext`, `AgentEngine`,
+`AgentResult`): an agent invokes exactly one workflow by delegating
+entirely to `WorkflowEngine`, completing the chain
+Agent → Workflow → Execution → Tool/Provider. No planning, reasoning,
+reflection, or multi-agent composition yet — see
+[ADR-0011](../adr/0011-agent-runtime-core-and-orchestration-chain.md).
 What follows is the approved recommendation for the remaining sprints.
 
 Recommendation, not a decision — architecture and sprint sequencing remain
@@ -58,18 +65,19 @@ first, `agents`/`workflow` last since they're consumers of everything else.
 | 10 | ~~Memory abstraction (`memory`)~~ → **First concrete provider** (`providers.claude.ClaudeProvider`), shipped | Re-sequenced ahead of memory: validates `BaseProvider` against a real LLM (Anthropic) while the contract is still cheap to change if it had needed to be — before `agents`/`memory` are built assuming a shape that turned out wrong. It didn't need to change. |
 | 11 | **Memory abstraction** (`memory`), shipped | No dependencies beyond `core`; needed by `agents` for state/context persistence, and now proven usable by `execution` for recording outcomes without any provider dependency in either direction. |
 | 12 | ~~Plugin loading (`plugins`)~~ → **Workflow engine** (`workflow`), shipped | Re-sequenced ahead of plugin loading and agent lifecycle: composes `execution`/`memory`/`events` (all already shipped) into sequential multi-step runs, proving the orchestration/execution boundary (ADR-0010) before `agents` is built on top of either. |
+| 13A | ~~Plugin loading (`plugins`)~~ → **Agent Runtime Core** (`agents`), shipped | Re-sequenced ahead of plugin loading again: a minimal, single-workflow agent runtime completes the orchestration chain (ADR-0011) while `workflow` is still fresh, before plugin loading (an unrelated, lower-priority capability) or richer agent behavior (planning, multi-agent) are attempted. |
 
-**Beyond sprint 12 (not scheduled):** **Plugin loading** (`plugins`, no
+**Beyond sprint 13A (not scheduled):** **Plugin loading** (`plugins`, no
 dependencies beyond `core`, benefits from `events` already existing),
-**Agent lifecycle** (`agents`, depends on `providers`, `tools`,
-`execution`, `authorization`, `memory`, `events`, and now `workflow` for
-multi-step composition), additional concrete providers (OpenAI, Gemini,
-Ollama — explicitly out of scope for Sprint 10), a provider-side
-memory-consumption mechanism (a provider reading prior memory as
-conversation context), dynamic workflow steps (a step's request built
-from an earlier step's result — deliberately not built in Sprint 12),
-parallel/scheduled workflow execution, embeddings/vector search/RAG for
-`memory`, the remainder of **Security primitives** (secrets management,
-encryption, audit trail), and the remainder of **observability** (tracing,
-metrics, and building on top of `events` for a trace/audit consumer) —
-all still open per ADR-0002, with no placement decided.
+richer agent capabilities (planning, reasoning, reflection, multi-agent
+composition, dynamic workflow selection — all deliberately deferred past
+Sprint 13A), additional concrete providers (OpenAI, Gemini, Ollama —
+explicitly out of scope for Sprint 10), a provider-side memory-consumption
+mechanism (a provider reading prior memory as conversation context),
+dynamic workflow steps (a step's request built from an earlier step's
+result — deliberately not built in Sprint 12), parallel/scheduled workflow
+execution, embeddings/vector search/RAG for `memory`, the remainder of
+**Security primitives** (secrets management, encryption, audit trail), and
+the remainder of **observability** (tracing, metrics, and building on top
+of `events` for a trace/audit consumer) — all still open per ADR-0002,
+with no placement decided.

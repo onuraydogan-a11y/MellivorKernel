@@ -72,7 +72,16 @@ Per ADR-0002, the kernel's responsibilities are limited to exactly:
   may depend on.
 
 - **`agents`** — Agent lifecycle: creation, state, execution, and teardown of
-  individual AI agents, independent of any single model provider.
+  individual AI agents, independent of any single model provider. Agent
+  Runtime Core implemented in Sprint 13A (`Agent`, `AgentDefinition`,
+  `AgentContext`, `AgentEngine`, `AgentResult`) — like `events`, `memory`,
+  and `workflow` before it, this responsibility already had its
+  designated package from ADR-0002; Sprint 13A only began filling it in.
+  Deliberately minimal: an agent invokes exactly one workflow by
+  delegating entirely to `workflow.WorkflowEngine` — no planning,
+  reasoning, reflection, or multi-agent composition yet. See
+  [`docs/specs/agents.md`](specs/agents.md) and
+  [ADR-0011](adr/0011-agent-runtime-core-and-orchestration-chain.md).
 
 - **`workflow`** — The workflow engine: composing multiple execution steps
   into a sequential process. Implemented in Sprint 12 (`Workflow`,
@@ -228,6 +237,15 @@ sequential `execution.ExecutionEngine.execute()` calls — it never
 touches a tool, provider, or `Dispatcher` directly, and `execution` has
 no dependency back on it. See [`docs/specs/workflow.md`](specs/workflow.md)
 and [ADR-0010](adr/0010-workflow-engine-and-orchestration-boundary.md).
+
+As of Sprint 13A, `agents` sits above `workflow`, invoking exactly one
+`workflow.WorkflowDefinition` per agent run by delegating entirely to
+`WorkflowEngine.run()` — `agents` has no dependency on `execution`,
+`authorization`, `tools`, or `providers` at all, and `workflow` has no
+dependency back on `agents`. The full chain is now
+Agent → Workflow → Execution → Tool/Provider, one direction only. See
+[`docs/specs/agents.md`](specs/agents.md) and
+[ADR-0011](adr/0011-agent-runtime-core-and-orchestration-chain.md).
 
 ## Consumption model
 

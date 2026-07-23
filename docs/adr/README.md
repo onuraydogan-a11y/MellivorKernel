@@ -40,3 +40,4 @@ Small, local, easily reversible choices do not need an ADR.
 | [0008](0008-event-bus-and-lifecycle-events.md) | Event Bus, and lifecycle events published by Execution and Authorization | Accepted |
 | [0009](0009-memory-subsystem-and-execution-recording.md) | Memory subsystem, and execution recording through it | Accepted |
 | [0010](0010-workflow-engine-and-orchestration-boundary.md) | Workflow Engine, and the orchestration/execution boundary | Accepted |
+| [0011](0011-agent-runtime-core-and-orchestration-chain.md) | Agent Runtime Core, and the full orchestration chain | Accepted |
