@@ -13,10 +13,14 @@ from mellivor_kernel.providers.health import ProviderHealthCheck
 class BaseProvider(ABC):
     """The contract every AI model provider must implement.
 
-    Concrete providers (for example an OpenAI or Anthropic adapter) are
-    implemented outside this repository's ``providers`` package -- see
-    ``docs/adr/0003-repository-boundaries.md`` -- but must subclass this
-    class and satisfy its abstract members.
+    Concrete providers subclass this class and satisfy its abstract
+    members. Per ``docs/adr/0003-repository-boundaries.md``, integrations
+    with *infrastructure* providers -- model providers among them -- belong
+    under this repository's ``providers`` package (see
+    :mod:`mellivor_kernel.providers.claude` for the reference
+    implementation); it is business-application integrations (CRM, HRIS,
+    and the like) that belong outside this repository, in a consuming
+    product.
 
     The request/response shape :meth:`invoke` accepts and returns is
     intentionally a generic mapping. Formalizing a concrete request and
