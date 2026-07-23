@@ -11,7 +11,8 @@ from mellivor_kernel.execution.result import ExecutionResult
 from mellivor_kernel.providers.exceptions import ProviderRegistrationError
 from mellivor_kernel.providers.registry import ProviderRegistry
 from mellivor_kernel.tools.context import ToolContext
-from mellivor_kernel.tools.exceptions import ToolRegistrationError
+from mellivor_kernel.tools.exceptions import ToolRegistrationError, ToolValidationError
+from mellivor_kernel.tools.permissions import Permission
 from mellivor_kernel.tools.pipeline import ToolExecutionPipeline
 from mellivor_kernel.tools.registry import ToolRegistry
 
@@ -52,31 +53,48 @@ class Dispatcher:
             tool_pipeline if tool_pipeline is not None else ToolExecutionPipeline()
         )
 
-    def dispatch(self, request: ExecutionRequest, context: ExecutionContext) -> ExecutionResult:
+    def dispatch(
+        self,
+        request: ExecutionRequest,
+        context: ExecutionContext,
+        *,
+        granted_permissions: frozenset[str] = frozenset(),
+    ) -> ExecutionResult:
         """Dispatch ``request`` to its target subsystem.
 
         Args:
             request: The request to dispatch.
             context: The execution-lifetime context to dispatch with.
+            granted_permissions: The permission identifiers (as raw
+                strings) available for this dispatch. Only meaningful for
+                :attr:`ExecutionTarget.TOOL` -- forwarded to the
+                :class:`~mellivor_kernel.tools.pipeline.ToolExecutionPipeline`'s
+                own permission check. Ignored for
+                :attr:`ExecutionTarget.PROVIDER`, since ``BaseProvider`` has
+                no permission model to check against.
 
         Returns:
             The outcome of the dispatched execution. A failure to resolve
-            ``request.operation`` in the target subsystem, or an exception
-            raised while executing it, is translated into a failed
-            :class:`ExecutionResult` rather than propagated.
+            ``request.operation`` in the target subsystem, an invalid
+            permission identifier, or an exception raised while executing
+            it, is translated into a failed :class:`ExecutionResult` rather
+            than propagated.
 
         Raises:
             DispatchError: If ``request.target`` names a subsystem this
                 dispatcher does not know how to reach.
         """
         if request.target == ExecutionTarget.TOOL:
-            return self._dispatch_to_tool(request, context)
+            return self._dispatch_to_tool(request, context, granted_permissions)
         if request.target == ExecutionTarget.PROVIDER:
             return self._dispatch_to_provider(request, context)
         raise DispatchError(f"No dispatch target registered for {request.target!r}.")
 
     def _dispatch_to_tool(
-        self, request: ExecutionRequest, context: ExecutionContext
+        self,
+        request: ExecutionRequest,
+        context: ExecutionContext,
+        granted_permissions: frozenset[str],
     ) -> ExecutionResult:
         """Resolve and run a tool through the tool execution pipeline."""
         try:
@@ -88,13 +106,24 @@ class Dispatcher:
                 metadata={"target": ExecutionTarget.TOOL.value},
             )
 
+        try:
+            resolved_permissions = frozenset(Permission(value) for value in granted_permissions)
+        except ToolValidationError as exc:
+            return ExecutionResult(
+                success=False,
+                error=str(exc),
+                metadata={"target": ExecutionTarget.TOOL.value, "stage": "permission_check"},
+            )
+
         tool_context = ToolContext(
             configuration=context.configuration,
             logger=context.logger,
             runtime=context.runtime,
             services=context.services,
         )
-        tool_result = self._tool_pipeline.run(tool, tool_context, request.payload)
+        tool_result = self._tool_pipeline.run(
+            tool, tool_context, request.payload, granted_permissions=resolved_permissions
+        )
 
         return ExecutionResult(
             success=tool_result.success,

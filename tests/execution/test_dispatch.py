@@ -24,7 +24,7 @@ from mellivor_kernel.providers import (
     ProviderRegistry,
 )
 from mellivor_kernel.tools import BaseTool, ToolContext, ToolRegistry, ToolResult
-from mellivor_kernel.tools.permissions import Permission
+from mellivor_kernel.tools.permissions import KERNEL_INTERNAL, Permission
 
 
 @dataclass
@@ -43,8 +43,14 @@ def _make_context() -> ExecutionContext:
 
 
 class _EchoTool(BaseTool):
-    def __init__(self, *, raises: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        raises: Exception | None = None,
+        required_permissions: frozenset[Permission] = frozenset(),
+    ) -> None:
         self._raises = raises
+        self._required_permissions = required_permissions
 
     @property
     def id(self) -> str:
@@ -68,7 +74,7 @@ class _EchoTool(BaseTool):
 
     @property
     def permissions(self) -> frozenset[Permission]:
-        return frozenset()
+        return self._required_permissions
 
     def validate(self, request: Mapping[str, object]) -> None:
         return
@@ -197,3 +203,49 @@ def test_dispatch_raises_for_unknown_target() -> None:
 
     with pytest.raises(DispatchError):
         dispatcher.dispatch(bogus_request, _make_context())
+
+
+def test_dispatch_denies_a_permissioned_tool_with_no_granted_permissions() -> None:
+    dispatcher = _make_dispatcher(tool=_EchoTool(required_permissions=frozenset({KERNEL_INTERNAL})))
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
+
+    result = dispatcher.dispatch(request, _make_context())
+
+    assert result.success is False
+    assert result.metadata["stage"] == "permission_check"
+
+
+def test_dispatch_forwards_granted_permissions_to_a_permissioned_tool() -> None:
+    dispatcher = _make_dispatcher(tool=_EchoTool(required_permissions=frozenset({KERNEL_INTERNAL})))
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo", payload={"x": 1})
+
+    result = dispatcher.dispatch(
+        request, _make_context(), granted_permissions=frozenset({"kernel.internal"})
+    )
+
+    assert result.success is True
+    assert result.payload == {"x": 1}
+
+
+def test_dispatch_denies_cleanly_on_malformed_granted_permission_string() -> None:
+    dispatcher = _make_dispatcher(tool=_EchoTool())
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
+
+    result = dispatcher.dispatch(
+        request, _make_context(), granted_permissions=frozenset({"NOT VALID"})
+    )
+
+    assert result.success is False
+    assert result.metadata["stage"] == "permission_check"
+
+
+def test_dispatch_ignores_granted_permissions_for_provider_target() -> None:
+    provider = _FakeProvider(ProviderConfiguration(provider_name="fake"))
+    dispatcher = _make_dispatcher(provider=provider)
+    request = ExecutionRequest(target=ExecutionTarget.PROVIDER, operation="fake")
+
+    result = dispatcher.dispatch(
+        request, _make_context(), granted_permissions=frozenset({"anything.at.all"})
+    )
+
+    assert result.success is True
