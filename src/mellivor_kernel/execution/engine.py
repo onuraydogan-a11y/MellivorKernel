@@ -9,18 +9,19 @@ from mellivor_kernel.execution.dispatch import Dispatcher
 from mellivor_kernel.execution.events import ExecutionCompleted, ExecutionFailed, ExecutionStarted
 from mellivor_kernel.execution.request import ExecutionRequest
 from mellivor_kernel.execution.result import ExecutionResult
+from mellivor_kernel.memory import MemoryEntry, MemoryStore
 
 
 class ExecutionEngine:
     """The kernel's single orchestration entry point for execution.
 
     Responsible only for validation, authorization gating, dispatch
-    selection, event publication, and the execution lifecycle (start/
-    outcome logging) of a request. Request validation is enforced by
-    :class:`~mellivor_kernel.execution.request.ExecutionRequest` itself at
-    construction -- an immutable request cannot exist in an invalid state,
-    so the engine has nothing further to validate before handing it to the
-    :class:`Dispatcher`.
+    selection, event publication, memory recording, and the execution
+    lifecycle (start/outcome logging) of a request. Request validation is
+    enforced by :class:`~mellivor_kernel.execution.request.ExecutionRequest`
+    itself at construction -- an immutable request cannot exist in an
+    invalid state, so the engine has nothing further to validate before
+    handing it to the :class:`Dispatcher`.
 
     The flow is ``ExecutionRequest -> Authorization -> Dispatcher ->
     Tool/Provider -> ExecutionResult``: when an :class:`Authorizer` is
@@ -39,6 +40,15 @@ class ExecutionEngine:
     lifecycle above -- again through the abstract ``EventBus`` Protocol
     only, never a concrete bus implementation.
 
+    When a :class:`~mellivor_kernel.memory.store.MemoryStore` is
+    configured, the engine records every execution's outcome as a
+    :class:`~mellivor_kernel.memory.entry.MemoryEntry` (keyed by
+    ``request.request_id``) after the terminal event above is published --
+    memory is kernel infrastructure the engine optionally *writes to*, not
+    a provider concern; see ADR-0009. A failure to record memory is logged
+    and never propagates -- a misbehaving memory backend must not break
+    execution.
+
     Deliberately excludes retry logic and workflow composition -- neither
     is an execution-orchestration concern.
     """
@@ -49,6 +59,7 @@ class ExecutionEngine:
         *,
         authorizer: Authorizer | None = None,
         event_bus: EventBus | None = None,
+        memory: MemoryStore | None = None,
     ) -> None:
         """Initialize the engine.
 
@@ -64,10 +75,14 @@ class ExecutionEngine:
                 ``None`` (the default), no events are published --
                 identical to this engine's behavior before the event bus
                 existed.
+            memory: The store execution outcomes are recorded to. If
+                ``None`` (the default), nothing is recorded -- identical
+                to this engine's behavior before memory existed.
         """
         self._dispatcher = dispatcher
         self._authorizer = authorizer
         self._event_bus = event_bus
+        self._memory = memory
 
     def execute(
         self,
@@ -121,7 +136,7 @@ class ExecutionEngine:
                 context.logger.warning(
                     "Request %r denied by authorization: %s", request.request_id, result.error
                 )
-                return self._finish(request, result)
+                return self._finish(request, result, context)
             effective_permissions = granted_permissions
 
         result = self._dispatcher.dispatch(
@@ -141,10 +156,12 @@ class ExecutionEngine:
                 result.error,
             )
 
-        return self._finish(request, result)
+        return self._finish(request, result, context)
 
-    def _finish(self, request: ExecutionRequest, result: ExecutionResult) -> ExecutionResult:
-        """Publish the terminal event for ``result`` and return it unchanged."""
+    def _finish(
+        self, request: ExecutionRequest, result: ExecutionResult, context: ExecutionContext
+    ) -> ExecutionResult:
+        """Publish the terminal event, record memory, and return ``result`` unchanged."""
         if result.success:
             self._publish(
                 ExecutionCompleted(
@@ -165,9 +182,38 @@ class ExecutionEngine:
                     stage=stage if isinstance(stage, str) else None,
                 )
             )
+        self._remember(request, result, context)
         return result
 
     def _publish(self, event: Event) -> None:
         """Publish ``event`` if an :class:`~mellivor_kernel.events.bus.EventBus` is configured."""
         if self._event_bus is not None:
             self._event_bus.publish(event)
+
+    def _remember(
+        self, request: ExecutionRequest, result: ExecutionResult, context: ExecutionContext
+    ) -> None:
+        """Record ``result`` to memory if a
+        :class:`~mellivor_kernel.memory.store.MemoryStore` is configured.
+
+        Never raises: a memory backend failure is logged and swallowed
+        rather than allowed to break execution.
+        """
+        if self._memory is None:
+            return
+
+        content = (
+            str(result.payload) if result.success and result.payload is not None else result.error
+        )
+        entry = MemoryEntry(
+            id=request.request_id,
+            content=content or "(no content)",
+            tags=frozenset({request.target.value}),
+            metadata={"operation": request.operation, "success": result.success},
+        )
+        try:
+            self._memory.add(entry)
+        except Exception as exc:
+            context.logger.warning(
+                "Failed to record request %r to memory: %s", request.request_id, exc
+            )

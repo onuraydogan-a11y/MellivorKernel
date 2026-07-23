@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from mellivor_kernel.core import Kernel, ServiceContainer, get_logger
 from mellivor_kernel.events import Event, EventHandler, EventRegistration
@@ -17,6 +18,7 @@ from mellivor_kernel.execution import (
     ExecutionStarted,
     ExecutionTarget,
 )
+from mellivor_kernel.memory import InMemoryStore, MemoryStore
 from mellivor_kernel.providers import ProviderRegistry
 from mellivor_kernel.tools import ToolRegistry
 from mellivor_kernel.tools.builtin import EchoTool
@@ -282,3 +284,96 @@ def test_engine_publishes_failed_with_authorization_stage_on_denial() -> None:
     assert isinstance(failed, ExecutionFailed)
     assert failed.stage == "authorization"
     assert failed.error == "denied by policy"
+
+
+def test_engine_without_memory_configured_records_nothing() -> None:
+    """No memory configured: identical to this engine's pre-Sprint-11
+    behavior -- no recording, no error.
+    """
+    engine = _make_engine()
+
+    result = engine.execute(
+        ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo"), _make_context()
+    )
+
+    assert result.success is True  # no memory wired in, nothing to assert on it
+
+
+def test_engine_records_a_successful_execution_to_memory() -> None:
+    tool_registry = ToolRegistry()
+    tool_registry.register(EchoTool())
+    dispatcher = Dispatcher(tool_registry, ProviderRegistry())
+    memory = InMemoryStore()
+    engine = ExecutionEngine(dispatcher, memory=memory)
+
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo", payload={"x": 1})
+    result = engine.execute(request, _make_context())
+
+    assert result.success is True
+    entry = memory.get(request.request_id)
+    assert entry is not None
+    assert entry.content == "{'x': 1}"
+    assert entry.tags == frozenset({"tool"})
+    assert entry.metadata == {"operation": "echo", "success": True}
+
+
+def test_engine_records_a_failed_execution_to_memory() -> None:
+    engine = _make_engine(register_echo=False)
+    memory = InMemoryStore()
+    dispatcher = Dispatcher(ToolRegistry(), ProviderRegistry())
+    engine = ExecutionEngine(dispatcher, memory=memory)
+
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
+    result = engine.execute(request, _make_context())
+
+    assert result.success is False
+    entry = memory.get(request.request_id)
+    assert entry is not None
+    assert entry.content == result.error
+    assert entry.metadata == {"operation": "echo", "success": False}
+
+
+def test_engine_records_an_authorization_denial_to_memory() -> None:
+    tool_registry = ToolRegistry()
+    tool_registry.register(EchoTool())
+    dispatcher = Dispatcher(tool_registry, ProviderRegistry())
+    memory = InMemoryStore()
+    authorizer = _FakeAuthorizer(granted=False, reason="denied by policy")
+    engine = ExecutionEngine(dispatcher, authorizer=authorizer, memory=memory)
+
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
+    engine.execute(request, _make_context())
+
+    entry = memory.get(request.request_id)
+    assert entry is not None
+    assert entry.content == "denied by policy"
+    assert entry.metadata["success"] is False
+
+
+def test_engine_swallows_a_failing_memory_backend() -> None:
+    class _FailingMemory:
+        def add(self, entry: object) -> None:
+            raise RuntimeError("memory backend is down")
+
+        def get(self, entry_id: str) -> None:
+            return None
+
+        def search(self, query: object) -> object:
+            raise NotImplementedError
+
+        def delete(self, entry_id: str) -> bool:
+            raise NotImplementedError
+
+        def clear(self) -> None:
+            raise NotImplementedError
+
+    tool_registry = ToolRegistry()
+    tool_registry.register(EchoTool())
+    dispatcher = Dispatcher(tool_registry, ProviderRegistry())
+    engine = ExecutionEngine(dispatcher, memory=cast(MemoryStore, _FailingMemory()))
+
+    result = engine.execute(
+        ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo"), _make_context()
+    )
+
+    assert result.success is True  # the failing memory backend never breaks execution
