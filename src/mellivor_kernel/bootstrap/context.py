@@ -6,6 +6,7 @@ from mellivor_kernel.core.container import ServiceContainer
 from mellivor_kernel.core.contracts import KernelSettings
 from mellivor_kernel.core.logging import get_logger
 from mellivor_kernel.core.runtime import HealthStatus, Kernel, KernelState
+from mellivor_kernel.execution.context import ExecutionContext
 from mellivor_kernel.providers.registry import ProviderRegistry
 from mellivor_kernel.tools.context import ToolContext
 from mellivor_kernel.tools.registry import ToolRegistry
@@ -103,6 +104,31 @@ class RuntimeContext:
             configuration, kernel, and service container.
         """
         return ToolContext(
+            configuration=self._configuration,
+            logger=get_logger(logger_name),
+            runtime=self._kernel,
+            services=self._kernel.container,
+        )
+
+    def execution_context(self, *, logger_name: str = "execution") -> ExecutionContext:
+        """Build an :class:`ExecutionContext` for running executions in this runtime.
+
+        This is the supported way to obtain an ``ExecutionContext`` from a
+        bootstrapped runtime, for the same reason
+        :meth:`tool_context` exists: ``RuntimeContext`` never exposes its
+        wrapped ``Kernel`` directly, but can construct a properly formed
+        ``ExecutionContext`` referencing it internally.
+
+        Args:
+            logger_name: The name passed to
+                :func:`~mellivor_kernel.core.logging.get_logger` for the
+                context's logger.
+
+        Returns:
+            A new :class:`ExecutionContext` wrapping this runtime's
+            configuration, kernel, and service container.
+        """
+        return ExecutionContext(
             configuration=self._configuration,
             logger=get_logger(logger_name),
             runtime=self._kernel,

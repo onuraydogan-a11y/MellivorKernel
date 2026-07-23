@@ -61,7 +61,7 @@ class Kernel:
         self._container = container if container is not None else ServiceContainer()
         self._state = KernelState.NOT_STARTED
         self._failure_detail: str | None = None
-        self._logger = get_logger(__name__)
+        self._logger = get_logger("runtime")
 
     @property
     def container(self) -> ServiceContainer:

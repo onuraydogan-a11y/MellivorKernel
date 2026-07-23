@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from mellivor_kernel.bootstrap import RuntimeContext
 from mellivor_kernel.core import Kernel, KernelState, ServiceContainer
+from mellivor_kernel.execution import ExecutionContext
 from mellivor_kernel.providers import ProviderRegistry
 from mellivor_kernel.tools import ToolContext, ToolExecutionPipeline, ToolRegistry
 from mellivor_kernel.tools.builtin import EchoTool
@@ -110,3 +111,14 @@ def test_tool_context_can_actually_run_a_tool() -> None:
 
     assert result.success is True
     assert result.payload == {"ping": "pong"}
+
+
+def test_execution_context_wraps_this_runtimes_kernel_and_services() -> None:
+    context = _make_context(started=True)
+
+    execution_context = context.execution_context()
+
+    assert isinstance(execution_context, ExecutionContext)
+    assert execution_context.configuration is context.configuration
+    assert execution_context.services is context.services
+    assert execution_context.runtime.state == context.state
