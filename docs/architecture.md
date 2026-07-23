@@ -103,6 +103,16 @@ Per ADR-0002, the kernel's responsibilities are limited to exactly:
   defined by the other subsystems and are swappable and independently
   versioned.
 
+### AI orchestration: placed in `execution` (Sprint 6)
+
+Per [ADR-0006](adr/0006-execution-core-orchestration-layer.md), the
+**AI orchestration** responsibility named above is implemented by
+`execution`, a top-level package alongside `bootstrap` rather than one of
+the seven subsystems in the diagram: it orchestrates *running* work across
+`tools` and `providers` (dispatch, execution lifecycle), the same way
+`bootstrap` composes them into a running kernel. `execution` depends on
+`tools` and `providers`; neither depends back on it.
+
 ### Partially placed: Observability. Not yet placed: Security primitives
 
 Structured logging — the first slice of the Observability responsibility —
@@ -133,6 +143,22 @@ read-only view of the result (`RuntimeContext`) to consumers. It is not a
 new kernel *responsibility* under the list above — it composes
 responsibilities that already exist — so its addition did not require
 amending that list.
+
+## The execution layer (`src/mellivor_kernel/execution/`)
+
+`execution` is a top-level package, a peer to `bootstrap` rather than one of
+the subsystems above, that orchestrates execution across them: an
+`ExecutionEngine` validates and runs an `ExecutionRequest` by dispatching it
+(`Dispatcher`) to the Tool Runtime or the Provider Runtime and returning a
+common `ExecutionResult`. See
+[`docs/specs/execution.md`](specs/execution.md) and
+[ADR-0006](adr/0006-execution-core-orchestration-layer.md) for the full
+contract and the rationale for placing it here rather than inside `tools`
+or `providers`.
+
+Execution Core is orchestration only: authorization, retries, workflow
+composition, and the event bus remain future work, exactly as they were
+before this sprint — `execution` does not anticipate their shape.
 
 ## Consumption model
 

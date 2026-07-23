@@ -35,3 +35,4 @@ Small, local, easily reversible choices do not need an ADR.
 | [0003](0003-repository-boundaries.md) | Repository boundaries | Accepted |
 | [0004](0004-public-api-philosophy.md) | Public API philosophy | Accepted |
 | [0005](0005-versioning-strategy.md) | Versioning strategy | Accepted |
+| [0006](0006-execution-core-orchestration-layer.md) | Execution Core as the kernel's orchestration layer | Accepted |

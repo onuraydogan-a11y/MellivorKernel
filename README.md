@@ -79,6 +79,7 @@ src/mellivor_kernel/
     config/          Configuration
     providers/       Multi-LLM provider abstraction
     bootstrap/       Composition layer: assembles core/config/providers/tools
+    execution/       Execution orchestration: request/context/result, dispatch, engine
 docs/architecture.md  High-level architecture
 docs/architecture/    Principles and roadmap
 docs/adr/            Architecture Decision Records
@@ -123,9 +124,13 @@ Anthropic/Gemini/local-model integration), `tools` (the `BaseTool`
 contract, `ToolRegistry`, the permission model, and the
 `ToolExecutionPipeline`, plus three demonstration tools —
 `EchoTool`/`HealthCheckTool`/`VersionTool` — that call no external API),
-and `bootstrap` (`KernelBootstrap`, `BootstrapBuilder`, and the read-only
+`bootstrap` (`KernelBootstrap`, `BootstrapBuilder`, and the read-only
 `RuntimeContext` — the composition layer that assembles the other four
-subsystems into a running kernel) — see
+subsystems into a running kernel), and `execution` (`ExecutionRequest`,
+`ExecutionContext`, `ExecutionResult`, `Dispatcher`, `ExecutionEngine` — the
+orchestration layer that dispatches execution to the Tool Runtime or
+Provider Runtime; see
+[ADR-0006](docs/adr/0006-execution-core-orchestration-layer.md)) — see
 [`docs/specs/`](docs/specs/README.md) for their public contracts.
 `agents`, `workflow`, `memory`, `events`, and `plugins` remain unimplemented
 package skeletons. Subsystems are implemented one at a time; do not depend
