@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from mellivor_kernel.authorization.events import AuthorizationDenied, AuthorizationGranted
 from mellivor_kernel.authorization.permission_set import PermissionSet
 from mellivor_kernel.authorization.request import AuthorizationRequest
 from mellivor_kernel.authorization.resolver import PermissionResolver
 from mellivor_kernel.authorization.result import AuthorizationResult
+from mellivor_kernel.events import Event, EventBus
 from mellivor_kernel.execution.context import ExecutionContext
 from mellivor_kernel.execution.request import ExecutionRequest
 from mellivor_kernel.tools.exceptions import ToolValidationError
@@ -22,23 +24,33 @@ class AuthorizationEngine:
       against what :class:`PermissionResolver` says is required, using the
       kernel's existing permission model
       (:func:`~mellivor_kernel.tools.permissions.missing_permissions`). No
-      new permission vocabulary or business policy is introduced.
+      new permission vocabulary or business policy is introduced. A pure
+      decision function -- it never publishes events, since it has no
+      execution request id to correlate them with.
     - :meth:`check` -- the adapter
       :class:`~mellivor_kernel.execution.engine.ExecutionEngine` actually
       calls, satisfying
       :class:`~mellivor_kernel.execution.contracts.Authorizer` structurally.
       It translates an ``ExecutionRequest`` into an
-      ``AuthorizationRequest`` and delegates to :meth:`authorize`.
+      ``AuthorizationRequest``, delegates to :meth:`authorize`, and
+      publishes :class:`~mellivor_kernel.authorization.events.AuthorizationGranted`
+      or :class:`~mellivor_kernel.authorization.events.AuthorizationDenied`
+      when an :class:`~mellivor_kernel.events.bus.EventBus` is configured.
     """
 
-    def __init__(self, permission_resolver: PermissionResolver) -> None:
+    def __init__(
+        self, permission_resolver: PermissionResolver, *, event_bus: EventBus | None = None
+    ) -> None:
         """Initialize the engine.
 
         Args:
             permission_resolver: Determines the permissions required for a
                 given target/operation.
+            event_bus: The bus decision events are published to. If
+                ``None`` (the default), no events are published.
         """
         self._permission_resolver = permission_resolver
+        self._event_bus = event_bus
 
     def authorize(self, request: AuthorizationRequest) -> AuthorizationResult:
         """Decide whether ``request`` is authorized.
@@ -76,7 +88,8 @@ class AuthorizationEngine:
 
         Satisfies :class:`~mellivor_kernel.execution.contracts.Authorizer`
         structurally -- this is the method ``ExecutionEngine`` calls, and
-        the only place in this subsystem that touches ``execution`` types.
+        the only place in this subsystem that touches ``execution`` types
+        or publishes events.
 
         Args:
             request: The execution request being authorized.
@@ -93,7 +106,16 @@ class AuthorizationEngine:
         try:
             claimed = PermissionSet(frozenset(Permission(value) for value in granted_permissions))
         except ToolValidationError as exc:
-            return AuthorizationResult(granted=False, reason=str(exc))
+            result = AuthorizationResult(granted=False, reason=str(exc))
+            self._publish(
+                AuthorizationDenied(
+                    request_id=request.request_id,
+                    target=request.target,
+                    operation=request.operation,
+                    reason=result.reason or "",
+                )
+            )
+            return result
 
         result = self.authorize(
             AuthorizationRequest(
@@ -108,9 +130,32 @@ class AuthorizationEngine:
                 request.target.value,
                 request.operation,
             )
+            self._publish(
+                AuthorizationGranted(
+                    request_id=request.request_id,
+                    target=request.target,
+                    operation=request.operation,
+                    granted_permissions=frozenset(
+                        permission.value for permission in result.granted_permissions.permissions
+                    ),
+                )
+            )
         else:
             context.logger.warning(
                 "Request %r denied authorization: %s", request.request_id, result.reason
             )
+            self._publish(
+                AuthorizationDenied(
+                    request_id=request.request_id,
+                    target=request.target,
+                    operation=request.operation,
+                    reason=result.reason or "",
+                )
+            )
 
         return result
+
+    def _publish(self, event: Event) -> None:
+        """Publish ``event`` if an :class:`~mellivor_kernel.events.bus.EventBus` is configured."""
+        if self._event_bus is not None:
+            self._event_bus.publish(event)

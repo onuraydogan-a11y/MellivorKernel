@@ -18,6 +18,7 @@ dependency ever existing.
 from __future__ import annotations
 
 from mellivor_kernel.authorization.engine import AuthorizationEngine
+from mellivor_kernel.authorization.events import AuthorizationDenied, AuthorizationGranted
 from mellivor_kernel.authorization.exceptions import AuthorizationError
 from mellivor_kernel.authorization.permission_set import PermissionSet
 from mellivor_kernel.authorization.request import AuthorizationRequest
@@ -25,8 +26,10 @@ from mellivor_kernel.authorization.resolver import PermissionResolver
 from mellivor_kernel.authorization.result import AuthorizationResult
 
 __all__ = [
+    "AuthorizationDenied",
     "AuthorizationEngine",
     "AuthorizationError",
+    "AuthorizationGranted",
     "AuthorizationRequest",
     "AuthorizationResult",
     "PermissionResolver",

@@ -7,13 +7,16 @@ from dataclasses import dataclass
 import pytest
 
 from mellivor_kernel.authorization import (
+    AuthorizationDenied,
     AuthorizationEngine,
     AuthorizationError,
+    AuthorizationGranted,
     AuthorizationRequest,
     PermissionResolver,
     PermissionSet,
 )
 from mellivor_kernel.core import Kernel, ServiceContainer, get_logger
+from mellivor_kernel.events import Event, EventHandler, EventRegistration
 from mellivor_kernel.execution import ExecutionContext, ExecutionRequest, ExecutionTarget
 from mellivor_kernel.tools import ToolRegistry
 from mellivor_kernel.tools.builtin import EchoTool, HealthCheckTool
@@ -39,6 +42,24 @@ def _make_registry() -> ToolRegistry:
 
 def _make_engine() -> AuthorizationEngine:
     return AuthorizationEngine(PermissionResolver(_make_registry()))
+
+
+class _RecordingEventBus:
+    """A minimal object satisfying `EventBus` structurally, deliberately not
+    `InMemoryEventBus`.
+    """
+
+    def __init__(self) -> None:
+        self.published: list[Event] = []
+
+    def publish(self, event: Event) -> None:
+        self.published.append(event)
+
+    def subscribe(self, event_type: type[Event], handler: EventHandler) -> EventRegistration:
+        raise NotImplementedError
+
+    def unsubscribe(self, registration: EventRegistration) -> None:
+        raise NotImplementedError
 
 
 def _make_context() -> ExecutionContext:
@@ -206,3 +227,67 @@ def test_check_denies_cleanly_on_malformed_permission_string() -> None:
 def test_invalid_authorization_request_rejected(blank: str) -> None:
     with pytest.raises(AuthorizationError):
         AuthorizationRequest(target=ExecutionTarget.TOOL, operation=blank)
+
+
+# -- event publication --------------------------------------------------------
+
+
+def test_authorize_never_publishes_events() -> None:
+    """`authorize()` is a pure decision function -- event publication is
+    `check()`'s responsibility only, since only it has a request id to
+    correlate events with.
+    """
+    event_bus = _RecordingEventBus()
+    engine = AuthorizationEngine(PermissionResolver(_make_registry()), event_bus=event_bus)
+
+    engine.authorize(AuthorizationRequest(target=ExecutionTarget.TOOL, operation="echo"))
+
+    assert event_bus.published == []
+
+
+def test_check_publishes_authorization_granted_on_success() -> None:
+    event_bus = _RecordingEventBus()
+    engine = AuthorizationEngine(PermissionResolver(_make_registry()), event_bus=event_bus)
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="health_check")
+
+    engine.check(request, _make_context(), granted_permissions=frozenset({"kernel.internal"}))
+
+    assert len(event_bus.published) == 1
+    event = event_bus.published[0]
+    assert isinstance(event, AuthorizationGranted)
+    assert event.request_id == request.request_id
+    assert event.granted_permissions == frozenset({"kernel.internal"})
+
+
+def test_check_publishes_authorization_denied_on_missing_permissions() -> None:
+    event_bus = _RecordingEventBus()
+    engine = AuthorizationEngine(PermissionResolver(_make_registry()), event_bus=event_bus)
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="health_check")
+
+    engine.check(request, _make_context(), granted_permissions=frozenset())
+
+    assert len(event_bus.published) == 1
+    event = event_bus.published[0]
+    assert isinstance(event, AuthorizationDenied)
+    assert event.request_id == request.request_id
+    assert "kernel.internal" in event.reason
+
+
+def test_check_publishes_authorization_denied_on_malformed_permission() -> None:
+    event_bus = _RecordingEventBus()
+    engine = AuthorizationEngine(PermissionResolver(_make_registry()), event_bus=event_bus)
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
+
+    engine.check(request, _make_context(), granted_permissions=frozenset({"NOT VALID"}))
+
+    assert len(event_bus.published) == 1
+    assert isinstance(event_bus.published[0], AuthorizationDenied)
+
+
+def test_check_without_an_event_bus_publishes_nothing() -> None:
+    engine = _make_engine()
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
+
+    result = engine.check(request, _make_context(), granted_permissions=frozenset())
+
+    assert result.granted is True  # no event bus wired in, nothing to assert on it

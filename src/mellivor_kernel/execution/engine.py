@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from mellivor_kernel.events import Event, EventBus
 from mellivor_kernel.execution.context import ExecutionContext
 from mellivor_kernel.execution.contracts import Authorizer
 from mellivor_kernel.execution.dispatch import Dispatcher
+from mellivor_kernel.execution.events import ExecutionCompleted, ExecutionFailed, ExecutionStarted
 from mellivor_kernel.execution.request import ExecutionRequest
 from mellivor_kernel.execution.result import ExecutionResult
 
@@ -13,8 +15,8 @@ class ExecutionEngine:
     """The kernel's single orchestration entry point for execution.
 
     Responsible only for validation, authorization gating, dispatch
-    selection, and the execution lifecycle (start/outcome logging) of a
-    request. Request validation is enforced by
+    selection, event publication, and the execution lifecycle (start/
+    outcome logging) of a request. Request validation is enforced by
     :class:`~mellivor_kernel.execution.request.ExecutionRequest` itself at
     construction -- an immutable request cannot exist in an invalid state,
     so the engine has nothing further to validate before handing it to the
@@ -29,11 +31,25 @@ class ExecutionEngine:
     -- it has no knowledge of how that decision is reached (see
     :mod:`mellivor_kernel.execution.contracts`).
 
+    When an :class:`~mellivor_kernel.events.bus.EventBus` is configured,
+    the engine publishes
+    :class:`~mellivor_kernel.execution.events.ExecutionStarted`,
+    :class:`~mellivor_kernel.execution.events.ExecutionCompleted`, and
+    :class:`~mellivor_kernel.execution.events.ExecutionFailed` around the
+    lifecycle above -- again through the abstract ``EventBus`` Protocol
+    only, never a concrete bus implementation.
+
     Deliberately excludes retry logic and workflow composition -- neither
     is an execution-orchestration concern.
     """
 
-    def __init__(self, dispatcher: Dispatcher, *, authorizer: Authorizer | None = None) -> None:
+    def __init__(
+        self,
+        dispatcher: Dispatcher,
+        *,
+        authorizer: Authorizer | None = None,
+        event_bus: EventBus | None = None,
+    ) -> None:
         """Initialize the engine.
 
         Args:
@@ -44,9 +60,14 @@ class ExecutionEngine:
                 performed and no permissions are ever forwarded to the
                 dispatcher -- identical to this engine's behavior before
                 authorization existed.
+            event_bus: The bus lifecycle events are published to. If
+                ``None`` (the default), no events are published --
+                identical to this engine's behavior before the event bus
+                existed.
         """
         self._dispatcher = dispatcher
         self._authorizer = authorizer
+        self._event_bus = event_bus
 
     def execute(
         self,
@@ -80,6 +101,11 @@ class ExecutionEngine:
             request.target.value,
             request.operation,
         )
+        self._publish(
+            ExecutionStarted(
+                request_id=request.request_id, target=request.target, operation=request.operation
+            )
+        )
 
         effective_permissions: frozenset[str] = frozenset()
         if self._authorizer is not None:
@@ -95,7 +121,7 @@ class ExecutionEngine:
                 context.logger.warning(
                     "Request %r denied by authorization: %s", request.request_id, result.error
                 )
-                return result
+                return self._finish(request, result)
             effective_permissions = granted_permissions
 
         result = self._dispatcher.dispatch(
@@ -115,4 +141,33 @@ class ExecutionEngine:
                 result.error,
             )
 
+        return self._finish(request, result)
+
+    def _finish(self, request: ExecutionRequest, result: ExecutionResult) -> ExecutionResult:
+        """Publish the terminal event for ``result`` and return it unchanged."""
+        if result.success:
+            self._publish(
+                ExecutionCompleted(
+                    request_id=request.request_id,
+                    target=request.target,
+                    operation=request.operation,
+                    execution_time_seconds=result.execution_time_seconds,
+                )
+            )
+        else:
+            stage = result.metadata.get("stage")
+            self._publish(
+                ExecutionFailed(
+                    request_id=request.request_id,
+                    target=request.target,
+                    operation=request.operation,
+                    error=result.error or "",
+                    stage=stage if isinstance(stage, str) else None,
+                )
+            )
         return result
+
+    def _publish(self, event: Event) -> None:
+        """Publish ``event`` if an :class:`~mellivor_kernel.events.bus.EventBus` is configured."""
+        if self._event_bus is not None:
+            self._event_bus.publish(event)

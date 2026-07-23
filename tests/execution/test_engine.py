@@ -5,12 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mellivor_kernel.core import Kernel, ServiceContainer, get_logger
+from mellivor_kernel.events import Event, EventHandler, EventRegistration
 from mellivor_kernel.execution import (
     Dispatcher,
+    ExecutionCompleted,
     ExecutionContext,
     ExecutionEngine,
+    ExecutionFailed,
     ExecutionRequest,
     ExecutionResult,
+    ExecutionStarted,
     ExecutionTarget,
 )
 from mellivor_kernel.providers import ProviderRegistry
@@ -71,6 +75,25 @@ class _RecordingDispatcher(Dispatcher):
     ) -> ExecutionResult:
         self.dispatched = True
         return super().dispatch(request, context, granted_permissions=granted_permissions)
+
+
+class _RecordingEventBus:
+    """A minimal object satisfying `EventBus` structurally, deliberately not
+    `InMemoryEventBus` -- proving `ExecutionEngine` only depends on the
+    Protocol shape.
+    """
+
+    def __init__(self) -> None:
+        self.published: list[Event] = []
+
+    def publish(self, event: Event) -> None:
+        self.published.append(event)
+
+    def subscribe(self, event_type: type[Event], handler: EventHandler) -> EventRegistration:
+        raise NotImplementedError
+
+    def unsubscribe(self, registration: EventRegistration) -> None:
+        raise NotImplementedError
 
 
 def _make_context() -> ExecutionContext:
@@ -191,3 +214,71 @@ def test_engine_uses_default_reason_when_authorizer_omits_one() -> None:
 
     assert result.success is False
     assert result.error == "Authorization denied."
+
+
+def test_engine_without_an_event_bus_publishes_nothing() -> None:
+    """No event bus configured: identical to this engine's pre-Sprint-9
+    behavior -- no events, no error.
+    """
+    engine = _make_engine()
+
+    result = engine.execute(
+        ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo"), _make_context()
+    )
+
+    assert result.success is True  # no event bus wired in, nothing to assert on it
+
+
+def test_engine_publishes_started_then_completed_on_success() -> None:
+    tool_registry = ToolRegistry()
+    tool_registry.register(EchoTool())
+    dispatcher = Dispatcher(tool_registry, ProviderRegistry())
+    event_bus = _RecordingEventBus()
+    engine = ExecutionEngine(dispatcher, event_bus=event_bus)
+
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo", payload={"x": 1})
+    engine.execute(request, _make_context())
+
+    assert [type(event) for event in event_bus.published] == [
+        ExecutionStarted,
+        ExecutionCompleted,
+    ]
+    started, completed = event_bus.published
+    assert isinstance(started, ExecutionStarted)
+    assert isinstance(completed, ExecutionCompleted)
+    assert started.request_id == request.request_id == completed.request_id
+    assert started.operation == "echo"
+    assert completed.execution_time_seconds >= 0.0
+
+
+def test_engine_publishes_started_then_failed_on_dispatch_failure() -> None:
+    engine = _make_engine(register_echo=False)
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
+    event_bus = _RecordingEventBus()
+    dispatcher = Dispatcher(ToolRegistry(), ProviderRegistry())
+    engine = ExecutionEngine(dispatcher, event_bus=event_bus)
+
+    engine.execute(request, _make_context())
+
+    assert [type(event) for event in event_bus.published] == [ExecutionStarted, ExecutionFailed]
+    failed = event_bus.published[1]
+    assert isinstance(failed, ExecutionFailed)
+    assert failed.error is not None
+    assert failed.stage is None
+
+
+def test_engine_publishes_failed_with_authorization_stage_on_denial() -> None:
+    tool_registry = ToolRegistry()
+    tool_registry.register(EchoTool())
+    dispatcher = Dispatcher(tool_registry, ProviderRegistry())
+    event_bus = _RecordingEventBus()
+    authorizer = _FakeAuthorizer(granted=False, reason="denied by policy")
+    engine = ExecutionEngine(dispatcher, authorizer=authorizer, event_bus=event_bus)
+
+    engine.execute(ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo"), _make_context())
+
+    assert [type(event) for event in event_bus.published] == [ExecutionStarted, ExecutionFailed]
+    failed = event_bus.published[1]
+    assert isinstance(failed, ExecutionFailed)
+    assert failed.stage == "authorization"
+    assert failed.error == "denied by policy"
