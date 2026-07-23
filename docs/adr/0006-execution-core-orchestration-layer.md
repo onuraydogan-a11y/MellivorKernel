@@ -103,3 +103,12 @@ with `providers` remaining interfaces-only per Sprint 5.
   reflect `execution` as a placed subsystem and to record that Sprint 6
   delivered Execution Core instead of the previously recommended event
   bus.
+
+**Update (Sprint 8):** the statement above that "Authorization... remains
+out of scope" and "`ExecutionEngine` performs no permission/authorization
+checks of its own" is superseded by
+[ADR-0007](0007-authorization-engine-and-execution-decoupling.md), which
+wires an optional, structurally-decoupled authorizer into `ExecutionEngine`
+before dispatch. Every other decision in this ADR (the two dispatch
+targets, the `ExecutionRequest`/`ExecutionContext`/`ExecutionResult`
+contracts) is unaffected and remains in force.

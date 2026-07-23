@@ -1,12 +1,14 @@
 # `execution` subsystem spec
 
-Status: Implemented (Sprint 6).
+Status: Implemented (Sprint 6; authorization wired in Sprint 8).
 
 Public contract exported from `mellivor_kernel.execution`. Anything not
 listed here is internal and carries no compatibility guarantee, per
 [ADR-0004](../adr/0004-public-api-philosophy.md). See
 [ADR-0006](../adr/0006-execution-core-orchestration-layer.md) for why this
-subsystem exists and what it deliberately excludes.
+subsystem exists, and
+[ADR-0007](../adr/0007-authorization-engine-and-execution-decoupling.md)
+for how it consults authorization without depending on it.
 
 ## Exceptions
 
@@ -98,21 +100,32 @@ def __init__(
     tool_pipeline: ToolExecutionPipeline | None = None,
 ) -> None
 
-def dispatch(self, request: ExecutionRequest, context: ExecutionContext) -> ExecutionResult
+def dispatch(
+    self,
+    request: ExecutionRequest,
+    context: ExecutionContext,
+    *,
+    granted_permissions: frozenset[str] = frozenset(),
+) -> ExecutionResult
 ```
 
 - `ExecutionTarget.TOOL` — looks up `request.operation` in `tool_registry`,
-  builds a `ToolContext` from `context`'s fields, and runs the tool through
-  `tool_pipeline.run(...)`. The resulting `ToolResult` is translated
-  field-for-field into an `ExecutionResult`, with `metadata["target"]` set
-  to `"tool"` alongside whatever metadata the pipeline itself set (for
-  example `"stage"`).
+  builds a `ToolContext` from `context`'s fields, converts each raw string
+  in `granted_permissions` into a `tools.permissions.Permission` (an
+  invalid format is translated into a failed `ExecutionResult`,
+  `metadata["stage"] == "permission_check"`, rather than raised), and runs
+  the tool through `tool_pipeline.run(..., granted_permissions=...)`. The
+  resulting `ToolResult` is translated field-for-field into an
+  `ExecutionResult`, with `metadata["target"]` set to `"tool"` alongside
+  whatever metadata the pipeline itself set (for example `"stage"`).
 - `ExecutionTarget.PROVIDER` — looks up `request.operation` in
   `provider_registry` and calls `provider.invoke(request.payload)` directly
-  (there is no provider-side pipeline to run it through). An exception
-  raised by `invoke()` is translated into a failed `ExecutionResult` rather
-  than propagated, consistent with ADR-0004's "errors are translated at the
-  boundary." `metadata["target"]` is set to `"provider"`.
+  (there is no provider-side pipeline to run it through). `granted_permissions`
+  is ignored on this path — `BaseProvider` has no permission model to
+  check it against. An exception raised by `invoke()` is translated into a
+  failed `ExecutionResult` rather than propagated, consistent with
+  ADR-0004's "errors are translated at the boundary." `metadata["target"]`
+  is set to `"provider"`.
 - An unregistered `operation` in either registry is *not* an exception from
   `dispatch()`'s point of view — the registry's `*RegistrationError` is
   caught and turned into a failed `ExecutionResult`, the same as any other
@@ -124,27 +137,72 @@ def dispatch(self, request: ExecutionRequest, context: ExecutionContext) -> Exec
   case `Dispatcher` cannot represent as a failed `ExecutionResult`, since it
   has no target to attribute the result to.
 
+## `execution.contracts`: the authorization seam
+
+Two small `Protocol`s (`@runtime_checkable`), the same dependency-inversion
+pattern `core.contracts.KernelSettings` established in Sprint 2 — reused
+here rather than `execution` importing `authorization` directly:
+
+```python
+class AuthorizationOutcome(Protocol):
+    granted: bool
+    reason: str | None
+
+class Authorizer(Protocol):
+    def check(
+        self, request: ExecutionRequest, context: ExecutionContext,
+        *, granted_permissions: frozenset[str],
+    ) -> AuthorizationOutcome: ...
+```
+
+`mellivor_kernel.authorization.AuthorizationEngine` satisfies `Authorizer`
+structurally; `execution` never imports `mellivor_kernel.authorization`.
+See [ADR-0007](../adr/0007-authorization-engine-and-execution-decoupling.md)
+and `docs/specs/authorization.md`.
+
 ## `ExecutionEngine`
 
 The kernel's single orchestration entry point.
 
 ```python
-def __init__(self, dispatcher: Dispatcher) -> None
+def __init__(self, dispatcher: Dispatcher, *, authorizer: Authorizer | None = None) -> None
 
-def execute(self, request: ExecutionRequest, context: ExecutionContext) -> ExecutionResult
+def execute(
+    self,
+    request: ExecutionRequest,
+    context: ExecutionContext,
+    *,
+    granted_permissions: frozenset[str] = frozenset(),
+) -> ExecutionResult
 ```
 
-Logs the start of execution, delegates to `dispatcher.dispatch(...)`, logs
-the outcome (`INFO` on success, `WARNING` on failure), and returns the
-result unchanged. Performs no validation of its own beyond what
-`ExecutionRequest` already enforces at construction, no retries, and no
-authorization — see ADR-0006 for why each of those is explicitly out of
-scope.
+Flow: `ExecutionRequest -> Authorization -> Dispatcher -> Tool/Provider ->
+ExecutionResult`.
+
+- Logs the start of execution.
+- If `authorizer` is configured, calls
+  `authorizer.check(request, context, granted_permissions=granted_permissions)`.
+  A denial (`outcome.granted is False`) returns a failed `ExecutionResult`
+  immediately (`metadata["stage"] == "authorization"`, `error` from
+  `outcome.reason` or a default) **without ever calling `Dispatcher`**.
+- If `authorizer` is `None` (the default) or grants, delegates to
+  `dispatcher.dispatch(...)` — forwarding `granted_permissions` only when
+  a grant was actually produced by an authorizer; with no authorizer
+  configured, an empty set is always forwarded, identical to this
+  engine's behavior before Sprint 8.
+- Logs the outcome (`INFO` on success, `WARNING` on failure) and returns
+  the result unchanged.
+
+Performs no validation of its own beyond what `ExecutionRequest` already
+enforces at construction, and no retries or workflow composition — see
+ADR-0006/ADR-0007 for why each is explicitly out of scope.
 
 ## Dependency relationship
 
 `execution` depends on `core` (the same four types `tools.ToolContext`
 depends on), `tools` (`ToolRegistry`, `ToolExecutionPipeline`, `ToolContext`,
-`ToolRegistrationError`), and `providers` (`ProviderRegistry`,
-`ProviderRegistrationError`) — all three only inside `dispatch.py`. `core`,
-`tools`, and `providers` have no dependency on `execution`.
+`ToolRegistrationError`, `ToolValidationError`, `Permission`), and
+`providers` (`ProviderRegistry`, `ProviderRegistrationError`) — all three
+only inside `dispatch.py`. `core`, `tools`, and `providers` have no
+dependency on `execution`. `authorization` depends on `execution` (not the
+other way around) — see `docs/specs/authorization.md`.

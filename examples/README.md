@@ -11,5 +11,11 @@ examples never become a dependency of the kernel itself.
 - [`execution_provider_invocation.py`](execution_provider_invocation.py) —
   the equivalent Provider Invocation path, against a test-only provider
   (not a production integration).
+- [`execution_with_authorization.py`](execution_with_authorization.py) —
+  the same Tool Invocation path with an `AuthorizationEngine` wired in:
+  a permissioned tool (`HealthCheckTool`) is denied without the right
+  permissions and succeeds once granted, proving the gap
+  `execution_tool_invocation.py`'s permission-free `echo` tool doesn't
+  exercise.
 
-Run either with `python examples/<name>.py` from the repository root.
+Run any of them with `python examples/<name>.py` from the repository root.

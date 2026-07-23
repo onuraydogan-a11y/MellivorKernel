@@ -80,6 +80,7 @@ src/mellivor_kernel/
     providers/       Multi-LLM provider abstraction
     bootstrap/       Composition layer: assembles core/config/providers/tools
     execution/       Execution orchestration: request/context/result, dispatch, engine
+    authorization/   Permission-based authorization for execution requests
 docs/architecture.md  High-level architecture
 docs/architecture/    Principles and roadmap
 docs/adr/            Architecture Decision Records
@@ -126,12 +127,17 @@ contract, `ToolRegistry`, the permission model, and the
 `EchoTool`/`HealthCheckTool`/`VersionTool` — that call no external API),
 `bootstrap` (`KernelBootstrap`, `BootstrapBuilder`, and the read-only
 `RuntimeContext` — the composition layer that assembles the other four
-subsystems into a running kernel), and `execution` (`ExecutionRequest`,
+subsystems into a running kernel), `execution` (`ExecutionRequest`,
 `ExecutionContext`, `ExecutionResult`, `Dispatcher`, `ExecutionEngine` — the
 orchestration layer that dispatches execution to the Tool Runtime or
 Provider Runtime; see
-[ADR-0006](docs/adr/0006-execution-core-orchestration-layer.md)) — see
-[`docs/specs/`](docs/specs/README.md) for their public contracts.
+[ADR-0006](docs/adr/0006-execution-core-orchestration-layer.md)), and
+`authorization` (`AuthorizationEngine`, `PermissionResolver`,
+`PermissionSet`, `AuthorizationRequest`, `AuthorizationResult` — decides
+whether an execution request is authorized, consulted by `ExecutionEngine`
+through a structural contract it never imports `authorization` to use; see
+[ADR-0007](docs/adr/0007-authorization-engine-and-execution-decoupling.md)) —
+see [`docs/specs/`](docs/specs/README.md) for their public contracts.
 `agents`, `workflow`, `memory`, `events`, and `plugins` remain unimplemented
 package skeletons. Subsystems are implemented one at a time; do not depend
 on this repository for production

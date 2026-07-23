@@ -113,17 +113,25 @@ the seven subsystems in the diagram: it orchestrates *running* work across
 `bootstrap` composes them into a running kernel. `execution` depends on
 `tools` and `providers`; neither depends back on it.
 
-### Partially placed: Observability. Not yet placed: Security primitives
+### Security primitives: partially placed via `authorization` (Sprint 8)
+
+Per [ADR-0007](adr/0007-authorization-engine-and-execution-decoupling.md),
+a slice of the **Security primitives** responsibility — deciding whether an
+execution request is authorized — is implemented by `authorization`, a
+top-level package that depends on `execution` (for its
+`target`/`operation` vocabulary) and `tools` (for the existing permission
+model), never the other way around: `execution` consults it only through
+the small `Authorizer`/`AuthorizationOutcome` Protocols defined in
+`execution.contracts`, so `execution` never imports `authorization`. Other
+Security primitives (secrets management, encryption, audit trail) remain
+unplaced.
+
+### Partially placed: Observability
 
 Structured logging — the first slice of the Observability responsibility —
 is implemented in `core/logging.py` (Sprint 2), using the fallback ADR-0002
 itself anticipated ("hosted inside `core/`") rather than a new top-level
 package. Tracing, metrics, and audit trail remain unaddressed.
-
-Security primitives do not yet have any implementation or placement. This
-remains a deliberate open point, not an omission — see ADR-0002. A future
-ADR will decide whether Security (and the rest of Observability) become
-their own top-level package(s) or continue to be hosted inside `core/`.
 
 ## The composition layer (`src/mellivor_kernel/bootstrap/`)
 
@@ -159,9 +167,24 @@ common `ExecutionResult`. See
 contract and the rationale for placing it here rather than inside `tools`
 or `providers`.
 
-Execution Core is orchestration only: authorization, retries, workflow
-composition, and the event bus remain future work, exactly as they were
-before this sprint — `execution` does not anticipate their shape.
+Execution Core is orchestration only: retries, workflow composition, and
+the event bus remain future work — `execution` does not anticipate their
+shape. As of Sprint 8, authorization is no longer future work (see below),
+but `execution` still does not perform it itself.
+
+## The authorization layer (`src/mellivor_kernel/authorization/`)
+
+`authorization` is a top-level package that decides only whether an
+`ExecutionRequest` is authorized to proceed to dispatch — it never
+executes and never dispatches. Unlike every other cross-subsystem
+dependency described in this document, the dependency here runs from the
+newer package to the established one: `authorization` depends on
+`execution` (and `tools`, for the existing permission model), while
+`execution` depends on neither — it consults authorization only through a
+small structural contract (`execution.contracts.Authorizer`), the same
+dependency-inversion pattern `core.contracts.KernelSettings` established
+in Sprint 2. See [`docs/specs/authorization.md`](specs/authorization.md)
+and [ADR-0007](adr/0007-authorization-engine-and-execution-decoupling.md).
 
 ## Consumption model
 
