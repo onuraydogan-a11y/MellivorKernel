@@ -87,7 +87,12 @@ Per ADR-0002, the kernel's responsibilities are limited to exactly:
 
 - **`events`** — The event bus: publish/subscribe primitives used for
   communication between kernel subsystems and, indirectly, between agents
-  and workflows.
+  and workflows. Implemented in Sprint 9 (`Event`, `EventBus`,
+  `InMemoryEventBus`) — unlike "AI orchestration" and "Security
+  primitives" below, this responsibility already had its designated
+  package from ADR-0002; Sprint 9 only filled it in. See
+  [`docs/specs/events.md`](specs/events.md) and
+  [ADR-0008](adr/0008-event-bus-and-lifecycle-events.md).
 
 - **`plugins`** — Plugin loading: discovery, registration, and lifecycle of
   pluggable extensions to the kernel.
@@ -167,10 +172,14 @@ common `ExecutionResult`. See
 contract and the rationale for placing it here rather than inside `tools`
 or `providers`.
 
-Execution Core is orchestration only: retries, workflow composition, and
-the event bus remain future work — `execution` does not anticipate their
-shape. As of Sprint 8, authorization is no longer future work (see below),
-but `execution` still does not perform it itself.
+Execution Core is orchestration only: retries and workflow composition
+remain future work — `execution` does not anticipate their shape. As of
+Sprint 8, authorization is no longer future work (see below), but
+`execution` still does not perform it itself. As of Sprint 9, `execution`
+publishes its own lifecycle events (`ExecutionStarted`, `ExecutionCompleted`,
+`ExecutionFailed`) to an injected `events.EventBus` — see
+[ADR-0008](adr/0008-event-bus-and-lifecycle-events.md) — but still depends
+only on the abstract bus, never a concrete implementation.
 
 ## The authorization layer (`src/mellivor_kernel/authorization/`)
 
@@ -185,6 +194,12 @@ small structural contract (`execution.contracts.Authorizer`), the same
 dependency-inversion pattern `core.contracts.KernelSettings` established
 in Sprint 2. See [`docs/specs/authorization.md`](specs/authorization.md)
 and [ADR-0007](adr/0007-authorization-engine-and-execution-decoupling.md).
+
+As of Sprint 9, `authorization` also publishes `AuthorizationGranted`/
+`AuthorizationDenied` to the same injected `events.EventBus` `execution`
+uses — a normal dependency on generic infrastructure, not the kind of
+coupling ADR-0007 inverted away from, since `events` carries no decision
+logic. See [ADR-0008](adr/0008-event-bus-and-lifecycle-events.md).
 
 ## Consumption model
 

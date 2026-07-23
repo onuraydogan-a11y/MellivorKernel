@@ -1,6 +1,6 @@
 # `authorization` subsystem spec
 
-Status: Implemented (Sprint 8).
+Status: Implemented (Sprint 8; events in Sprint 9).
 
 Public contract exported from `mellivor_kernel.authorization`. Anything not
 listed here is internal and carries no compatibility guarantee, per
@@ -8,7 +8,9 @@ listed here is internal and carries no compatibility guarantee, per
 [ADR-0007](../adr/0007-authorization-engine-and-execution-decoupling.md)
 for why this subsystem exists, why it depends on `execution` rather than
 the other way around, and what it deliberately excludes (execution,
-dispatch, business policy).
+dispatch, business policy); see
+[ADR-0008](../adr/0008-event-bus-and-lifecycle-events.md) for its
+published events.
 
 ## Exceptions
 
@@ -79,10 +81,26 @@ def resolve_required_permissions(self, target: ExecutionTarget, operation: str) 
   safe because that operation still cannot execute — `Dispatcher`'s own
   registry lookup fails it regardless of what authorization decided.
 
+## `authorization.events`
+
+Two of `authorization`'s own event types (`events.Event` subclasses),
+published only by `AuthorizationEngine.check()` (never by `authorize()`
+— see below):
+
+- `AuthorizationGranted` (`request_id`, `target`, `operation`,
+  `granted_permissions: frozenset[str]`).
+- `AuthorizationDenied` (`request_id`, `target`, `operation`, `reason`).
+
+`request_id` is the originating `ExecutionRequest.request_id`, letting a
+subscriber correlate an authorization event with the `execution.events`
+sequence for the same request. See ADR-0008 and `docs/specs/events.md`.
+
 ## `AuthorizationEngine`
 
 ```python
-def __init__(self, permission_resolver: PermissionResolver) -> None
+def __init__(
+    self, permission_resolver: PermissionResolver, *, event_bus: EventBus | None = None
+) -> None
 
 def authorize(self, request: AuthorizationRequest) -> AuthorizationResult
 
@@ -100,15 +118,21 @@ def check(
   using the *existing*
   `tools.permissions.missing_permissions(required, granted)` — no new
   diffing logic. Grants if nothing is missing; otherwise denies, naming
-  every missing permission in `reason`.
+  every missing permission in `reason`. **Never publishes events** — it
+  takes only an `AuthorizationRequest`, which has no execution request id
+  to correlate an event against.
 - `check()` — the adapter `execution.ExecutionEngine` actually calls, and
-  the only method in this subsystem that touches `execution` types.
-  Converts each raw permission string in `granted_permissions` into a
-  `tools.permissions.Permission`; an invalid format (a `ToolValidationError`)
-  is translated into a denied `AuthorizationResult` rather than raised,
-  consistent with ADR-0004. Builds an `AuthorizationRequest` from
-  `request.target`/`request.operation`/the validated claim and delegates
-  to `authorize()`.
+  the only method in this subsystem that touches `execution` types or
+  publishes events. Converts each raw permission string in
+  `granted_permissions` into a `tools.permissions.Permission`; an invalid
+  format (a `ToolValidationError`) is translated into a denied
+  `AuthorizationResult` (and a published `AuthorizationDenied`) rather
+  than raised, consistent with ADR-0004. Builds an `AuthorizationRequest`
+  from `request.target`/`request.operation`/the validated claim, delegates
+  to `authorize()`, then publishes `AuthorizationGranted` or
+  `AuthorizationDenied` when `event_bus` is configured. With
+  `event_bus=None` (the default), no events are ever published —
+  identical to this engine's behavior before Sprint 9.
 
 `check()`'s signature satisfies `execution.contracts.Authorizer`
 structurally — `execution` never imports `AuthorizationEngine` by name; see
@@ -117,13 +141,14 @@ structurally — `execution` never imports `AuthorizationEngine` by name; see
 ## Dependency relationship
 
 ```
-authorization → execution, tools, core
+authorization → execution, tools, events, core
 ```
 
 `authorization` depends on `execution` (`ExecutionRequest`,
-`ExecutionContext`, `ExecutionTarget`) and `tools` (`Permission`,
+`ExecutionContext`, `ExecutionTarget`), `tools` (`Permission`,
 `missing_permissions`, `ToolRegistry`, `ToolRegistrationError`,
-`ToolValidationError`) — never on `providers`. `execution` has **no**
-dependency on `authorization`; it depends only on the `Authorizer`/
-`AuthorizationOutcome` Protocols it defines itself (see
-`execution.contracts`). `tools` has no dependency on `authorization`.
+`ToolValidationError`), and `events` (`Event`, `EventBus`) — never on
+`providers`. `execution` has **no** dependency on `authorization`; it
+depends only on the `Authorizer`/`AuthorizationOutcome` Protocols it
+defines itself (see `execution.contracts`). `tools` and `events` have no
+dependency on `authorization`.

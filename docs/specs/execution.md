@@ -1,14 +1,17 @@
 # `execution` subsystem spec
 
-Status: Implemented (Sprint 6; authorization wired in Sprint 8).
+Status: Implemented (Sprint 6; authorization wired in Sprint 8; events in
+Sprint 9).
 
 Public contract exported from `mellivor_kernel.execution`. Anything not
 listed here is internal and carries no compatibility guarantee, per
 [ADR-0004](../adr/0004-public-api-philosophy.md). See
 [ADR-0006](../adr/0006-execution-core-orchestration-layer.md) for why this
-subsystem exists, and
+subsystem exists,
 [ADR-0007](../adr/0007-authorization-engine-and-execution-decoupling.md)
-for how it consults authorization without depending on it.
+for how it consults authorization without depending on it, and
+[ADR-0008](../adr/0008-event-bus-and-lifecycle-events.md) for its
+published events.
 
 ## Exceptions
 
@@ -160,12 +163,36 @@ structurally; `execution` never imports `mellivor_kernel.authorization`.
 See [ADR-0007](../adr/0007-authorization-engine-and-execution-decoupling.md)
 and `docs/specs/authorization.md`.
 
+## `execution.events`
+
+Three of `execution`'s own event types (`events.Event` subclasses),
+published by `ExecutionEngine`:
+
+- `ExecutionStarted` (`request_id`, `target`, `operation`) — published
+  once, at the start of `execute()`.
+- `ExecutionCompleted` (adds `execution_time_seconds`) — published when
+  the result is successful.
+- `ExecutionFailed` (adds `error`, `stage: str | None = None`) — published
+  when the result is unsuccessful, whichever stage produced the failure
+  (authorization denial, dispatch failure, or an exception during
+  execution).
+
+Exactly one of `ExecutionCompleted`/`ExecutionFailed` is published per
+`execute()` call, always preceded by `ExecutionStarted`. See ADR-0008 and
+`docs/specs/events.md`.
+
 ## `ExecutionEngine`
 
 The kernel's single orchestration entry point.
 
 ```python
-def __init__(self, dispatcher: Dispatcher, *, authorizer: Authorizer | None = None) -> None
+def __init__(
+    self,
+    dispatcher: Dispatcher,
+    *,
+    authorizer: Authorizer | None = None,
+    event_bus: EventBus | None = None,
+) -> None
 
 def execute(
     self,
@@ -177,12 +204,14 @@ def execute(
 ```
 
 Flow: `ExecutionRequest -> Authorization -> Dispatcher -> Tool/Provider ->
-ExecutionResult`.
+ExecutionResult`, with `ExecutionStarted`/`ExecutionCompleted`/
+`ExecutionFailed` published around it when `event_bus` is configured.
 
-- Logs the start of execution.
+- Logs the start of execution and publishes `ExecutionStarted`.
 - If `authorizer` is configured, calls
   `authorizer.check(request, context, granted_permissions=granted_permissions)`.
-  A denial (`outcome.granted is False`) returns a failed `ExecutionResult`
+  A denial (`outcome.granted is False`) publishes `ExecutionFailed`
+  (`stage="authorization"`) and returns a failed `ExecutionResult`
   immediately (`metadata["stage"] == "authorization"`, `error` from
   `outcome.reason` or a default) **without ever calling `Dispatcher`**.
 - If `authorizer` is `None` (the default) or grants, delegates to
@@ -190,8 +219,12 @@ ExecutionResult`.
   a grant was actually produced by an authorizer; with no authorizer
   configured, an empty set is always forwarded, identical to this
   engine's behavior before Sprint 8.
-- Logs the outcome (`INFO` on success, `WARNING` on failure) and returns
-  the result unchanged.
+- Logs the outcome (`INFO` on success, `WARNING` on failure), publishes
+  `ExecutionCompleted` or `ExecutionFailed` accordingly, and returns the
+  result unchanged.
+
+With `event_bus=None` (the default), no events are ever published —
+identical to this engine's behavior before Sprint 9.
 
 Performs no validation of its own beyond what `ExecutionRequest` already
 enforces at construction, and no retries or workflow composition — see
@@ -201,8 +234,9 @@ ADR-0006/ADR-0007 for why each is explicitly out of scope.
 
 `execution` depends on `core` (the same four types `tools.ToolContext`
 depends on), `tools` (`ToolRegistry`, `ToolExecutionPipeline`, `ToolContext`,
-`ToolRegistrationError`, `ToolValidationError`, `Permission`), and
-`providers` (`ProviderRegistry`, `ProviderRegistrationError`) — all three
-only inside `dispatch.py`. `core`, `tools`, and `providers` have no
-dependency on `execution`. `authorization` depends on `execution` (not the
-other way around) — see `docs/specs/authorization.md`.
+`ToolRegistrationError`, `ToolValidationError`, `Permission`), `providers`
+(`ProviderRegistry`, `ProviderRegistrationError`) — all three only inside
+`dispatch.py` — and `events` (`Event`, `EventBus`). `core`, `tools`,
+`providers`, and `events` have no dependency on `execution`. `authorization`
+depends on `execution` (not the other way around) — see
+`docs/specs/authorization.md`.

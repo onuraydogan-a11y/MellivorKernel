@@ -16,3 +16,4 @@ Specs are added as each kernel subsystem is designed and implemented:
 - [`bootstrap.md`](bootstrap.md)
 - [`execution.md`](execution.md)
 - [`authorization.md`](authorization.md)
+- [`events.md`](events.md)

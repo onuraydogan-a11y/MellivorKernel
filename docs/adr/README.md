@@ -37,3 +37,4 @@ Small, local, easily reversible choices do not need an ADR.
 | [0005](0005-versioning-strategy.md) | Versioning strategy | Accepted |
 | [0006](0006-execution-core-orchestration-layer.md) | Execution Core as the kernel's orchestration layer | Accepted |
 | [0007](0007-authorization-engine-and-execution-decoupling.md) | Authorization Engine, decoupled from Execution Core via a structural contract | Accepted |
+| [0008](0008-event-bus-and-lifecycle-events.md) | Event Bus, and lifecycle events published by Execution and Authorization | Accepted |

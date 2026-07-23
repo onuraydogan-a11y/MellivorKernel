@@ -17,5 +17,10 @@ examples never become a dependency of the kernel itself.
   permissions and succeeds once granted, proving the gap
   `execution_tool_invocation.py`'s permission-free `echo` tool doesn't
   exercise.
+- [`execution_with_events.py`](execution_with_events.py) — the same
+  denied-then-granted flow with an `InMemoryEventBus` wired into both
+  `ExecutionEngine` and `AuthorizationEngine`: a single handler subscribes
+  to every event type and prints the full lifecycle sequence, correlated
+  by `request_id`, for both outcomes.
 
 Run any of them with `python examples/<name>.py` from the repository root.

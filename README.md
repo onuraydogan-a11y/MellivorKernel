@@ -136,11 +136,17 @@ Provider Runtime; see
 `PermissionSet`, `AuthorizationRequest`, `AuthorizationResult` — decides
 whether an execution request is authorized, consulted by `ExecutionEngine`
 through a structural contract it never imports `authorization` to use; see
-[ADR-0007](docs/adr/0007-authorization-engine-and-execution-decoupling.md)) —
-see [`docs/specs/`](docs/specs/README.md) for their public contracts.
-`agents`, `workflow`, `memory`, `events`, and `plugins` remain unimplemented
-package skeletons. Subsystems are implemented one at a time; do not depend
-on this repository for production
+[ADR-0007](docs/adr/0007-authorization-engine-and-execution-decoupling.md)),
+and `events` (`Event`, `EventBus`, `InMemoryEventBus`, `EventHandler`,
+`EventRegistration` — an in-process publish/subscribe abstraction, not a
+distributed messaging system; `execution` and `authorization` both publish
+lifecycle events through it without depending on any concrete
+implementation; see
+[ADR-0008](docs/adr/0008-event-bus-and-lifecycle-events.md)) — see
+[`docs/specs/`](docs/specs/README.md) for their public contracts.
+`agents`, `workflow`, `memory`, and `plugins` remain unimplemented package
+skeletons. Subsystems are implemented one at a time; do not depend on this
+repository for production
 use yet.
 
 ## Contributing
