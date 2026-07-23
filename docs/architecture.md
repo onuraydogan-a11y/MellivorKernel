@@ -106,7 +106,11 @@ Per ADR-0002, the kernel's responsibilities are limited to exactly:
   model providers and related external systems. This is the only place
   provider-specific code is allowed to live; providers implement contracts
   defined by the other subsystems and are swappable and independently
-  versioned.
+  versioned. The interface (`BaseProvider`, `ProviderRegistry`,
+  `ProviderFactory`) shipped in Sprint 3; the first concrete
+  implementation, `providers.claude.ClaudeProvider` (Anthropic Messages
+  API), shipped in Sprint 10 with no change to that interface — see
+  [`docs/specs/providers.md`](specs/providers.md).
 
 ### AI orchestration: placed in `execution` (Sprint 6)
 

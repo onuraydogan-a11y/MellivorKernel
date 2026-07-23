@@ -104,6 +104,13 @@ pip install -e ".[dev]"
 pre-commit install
 ```
 
+Tests for `providers.claude.ClaudeProvider` require the optional
+`anthropic` package; without it (plain `[dev]`) those two test files
+skip cleanly rather than failing. Install
+`pip install -e ".[dev,anthropic]"` to also exercise them (CI does this).
+They never call the live API — only real `anthropic` SDK types are used,
+with a fake client injected in place of network I/O.
+
 ```bash
 ruff check .          # lint
 ruff format .         # format
@@ -120,8 +127,10 @@ pull request against `main`, on Python 3.12 and 3.13.
 `ServiceContainer` DI container, structured logging, and the `Kernel`
 runtime/lifecycle), `config` (`KernelConfig`, `Environment`, `load_config`),
 `providers` (the `BaseProvider` contract, `ProviderRegistry`,
-`ProviderFactory` — interfaces and registry only, no concrete OpenAI/
-Anthropic/Gemini/local-model integration), `tools` (the `BaseTool`
+`ProviderFactory`, plus one concrete provider —
+`providers.claude.ClaudeProvider`, backed by the Anthropic Messages API;
+optional, requires `pip install mellivor-kernel[anthropic]`; no OpenAI/
+Gemini/local-model integration yet), `tools` (the `BaseTool`
 contract, `ToolRegistry`, the permission model, and the
 `ToolExecutionPipeline`, plus three demonstration tools —
 `EchoTool`/`HealthCheckTool`/`VersionTool` — that call no external API),
