@@ -84,6 +84,8 @@ src/mellivor_kernel/
     bootstrap/       Composition layer: assembles core/config/providers/tools
     execution/       Execution orchestration: request/context/result, dispatch, engine
     authorization/   Permission-based authorization for execution requests
+    security/        Security foundation: secrets, policy, secure config, audit contracts
+    observability/   Observability foundation: metrics/tracing/event contracts, no-ops
 docs/architecture.md  High-level architecture
 docs/architecture/    Principles and roadmap
 docs/adr/            Architecture Decision Records
@@ -130,8 +132,11 @@ pull request against `main`, on Python 3.12 and 3.13.
 [ADR-0005](docs/adr/0005-versioning-strategy.md), that version number is
 reserved for an explicit future decision once every responsibility in
 ADR-0002 is stable, which is not yet the case (`plugins` is unimplemented;
-`agents` is a first, deliberately minimal slice; Security primitives and
-most of Observability remain unaddressed). See
+`agents` is a first, deliberately minimal slice; `security` and
+`observability` are foundation-only — contracts and no-op primitives, no
+concrete secret backend, authentication, encryption, metrics/tracing
+vendor, or telemetry export, and neither is consumed by any other
+subsystem yet). See
 [`docs/release/v1.0-release-checklist.md`](docs/release/v1.0-release-checklist.md)
 for the complete release-readiness assessment, including known
 limitations.
@@ -183,6 +188,21 @@ and a first, deliberately minimal slice of `agents` — Agent Runtime Core
 composition yet; see
 [ADR-0011](docs/adr/0011-agent-runtime-core-and-orchestration-chain.md)) —
 see [`docs/specs/`](docs/specs/README.md) for their public contracts.
+
+Two further foundation-only packages are also implemented: `security`
+(`Secret`, `SecretProvider`, `SecretProviderRegistry`, `SecurityPolicy`,
+`SecurityDecision`, `SecureConfiguration`, `AuditRecord`, `AuditSink` —
+reusable security contracts and primitives, depending only on `core`; no
+concrete secret backend, authentication, OAuth, SSO, RBAC, or encryption;
+see [ADR-0012](docs/adr/0012-security-foundation.md)) and `observability`
+(`ObservationContext`, `MetricsRecorder`, `TraceRecorder`/`TraceSpan`,
+`StructuredEventSink`/`StructuredObservationEvent`, no-op default
+implementations, and the `Observability` DI wrapper — depending on no
+other kernel package; no metrics/tracing backend or telemetry export; see
+[ADR-0013](docs/adr/0013-observability-foundation.md)). Both are
+dependency-injected, structurally separate from `execution`, `workflow`,
+`agents`, and `providers`, and not yet consumed by any other subsystem.
+
 `plugins` remains an unimplemented package skeleton. Bootstrap does not
 yet wire the newer engines (`ExecutionEngine`, `AuthorizationEngine`,
 `WorkflowEngine`, `AgentEngine`) together automatically — a consumer

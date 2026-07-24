@@ -1,6 +1,6 @@
 # `observability` subsystem spec
 
-Status: Foundation (Sprint 15)
+Status: Foundation (Sprint 16)
 
 This sprint defines the kernel's reusable observability foundation. It does
 not implement a telemetry backend, metrics engine, tracing vendor, or product

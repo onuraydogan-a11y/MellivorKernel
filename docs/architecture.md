@@ -3,11 +3,15 @@
 Status: Release Candidate (v0.13.0). `core`, `config`, `tools`,
 `providers` (interfaces plus the `ClaudeProvider` reference
 implementation), `bootstrap`, `execution`, `authorization`, `events`,
-`memory`, `workflow`, and a first slice of `agents` are implemented — see
-each subsystem's entry below and its own spec in `docs/specs/` for what
+`memory`, `workflow`, a first slice of `agents`, and foundation-only
+`security` and `observability` packages are implemented — see each
+subsystem's entry below and its own spec in `docs/specs/` for what
 "implemented" covers and excludes. `plugins` remains an unimplemented
-skeleton; Security primitives and most of Observability remain
-unaddressed. See `docs/release/v1.0-release-checklist.md` for the full
+skeleton; `agents` is a first, deliberately minimal slice; `security` and
+`observability` are contracts-and-primitives-only foundations with no
+concrete secret backend, authentication model, metrics/tracing vendor, or
+telemetry export yet, and neither is consumed by any other subsystem yet.
+See `docs/release/v1.0-release-checklist.md` for the full
 release-readiness assessment.
 
 This document reflects the scope decision recorded in
@@ -151,7 +155,7 @@ the seven subsystems in the diagram: it orchestrates *running* work across
 `bootstrap` composes them into a running kernel. `execution` depends on
 `tools` and `providers`; neither depends back on it.
 
-### Security primitives: partially placed via `authorization` (Sprint 8)
+### Security primitives: `authorization` (Sprint 8) plus a `security` foundation (Sprint 15)
 
 Per [ADR-0007](adr/0007-authorization-engine-and-execution-decoupling.md),
 a slice of the **Security primitives** responsibility — deciding whether an
@@ -160,16 +164,42 @@ top-level package that depends on `execution` (for its
 `target`/`operation` vocabulary) and `tools` (for the existing permission
 model), never the other way around: `execution` consults it only through
 the small `Authorizer`/`AuthorizationOutcome` Protocols defined in
-`execution.contracts`, so `execution` never imports `authorization`. Other
-Security primitives (secrets management, encryption, audit trail) remain
-unplaced.
+`execution.contracts`, so `execution` never imports `authorization`.
 
-### Partially placed: Observability
+As of Sprint 15, a second, structurally separate slice of the same
+responsibility is implemented by `security` — a top-level,
+dependency-injected package providing secret handling (`Secret`,
+`SecretProvider`, `SecretProviderRegistry`), a structural policy contract
+(`SecurityPolicy`, `SecurityDecision`), a secure-configuration contract
+(`SecureConfiguration`), and audit contracts (`AuditRecord`, `AuditSink`).
+It depends only on `core` (for the shared `KernelError` base) and is not
+imported by `authorization`, `execution`, `workflow`, `agents`, or
+`providers` — see [`docs/specs/security.md`](specs/security.md) and
+[ADR-0012](adr/0012-security-foundation.md). This package is
+foundation-only: it implements no authentication, OAuth, SSO, RBAC,
+encryption, or concrete secret backend, and no subsystem consumes it yet.
+Those remain unplaced.
+
+### Observability: structured logging (Sprint 2) plus an `observability` foundation (Sprint 16)
 
 Structured logging — the first slice of the Observability responsibility —
 is implemented in `core/logging.py` (Sprint 2), using the fallback ADR-0002
 itself anticipated ("hosted inside `core/`") rather than a new top-level
-package. Tracing, metrics, and audit trail remain unaddressed.
+package.
+
+As of Sprint 16, a second slice is implemented by `observability` — a
+top-level, dependency-injected package providing correlation/trace
+metadata (`ObservationContext`), metrics and tracing protocols
+(`MetricsRecorder`, `TraceRecorder`/`TraceSpan`), a structured-event
+protocol (`StructuredEventSink`/`StructuredObservationEvent`), no-op
+default implementations, and an `Observability` composition wrapper. Unlike
+every other subsystem in this document, it has no dependency on any other
+kernel package, including `core` — see
+[`docs/specs/observability.md`](specs/observability.md) and
+[ADR-0013](adr/0013-observability-foundation.md). This package is
+foundation-only: it ships no metrics backend, tracing vendor integration,
+telemetry exporter, or audit/trace consumer built on `events`, and no
+subsystem consumes it yet. Those remain unaddressed.
 
 ## The composition layer (`src/mellivor_kernel/bootstrap/`)
 

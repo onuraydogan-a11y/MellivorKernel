@@ -1,6 +1,6 @@
 # `security` subsystem spec
 
-Status: Foundation (Sprint 14)
+Status: Foundation (Sprint 15)
 
 Public contract exported from `mellivor_kernel.security`. Anything not
 listed here is internal and carries no compatibility guarantee, per

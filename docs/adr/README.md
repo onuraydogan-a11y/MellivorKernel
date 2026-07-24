@@ -41,3 +41,5 @@ Small, local, easily reversible choices do not need an ADR.
 | [0009](0009-memory-subsystem-and-execution-recording.md) | Memory subsystem, and execution recording through it | Accepted |
 | [0010](0010-workflow-engine-and-orchestration-boundary.md) | Workflow Engine, and the orchestration/execution boundary | Accepted |
 | [0011](0011-agent-runtime-core-and-orchestration-chain.md) | Agent Runtime Core, and the full orchestration chain | Accepted |
+| [0012](0012-security-foundation.md) | Introduce a dedicated `security` subsystem for reusable kernel security primitives | Accepted |
+| [0013](0013-observability-foundation.md) | Introduce a dedicated `observability` subsystem for reusable kernel observability primitives | Accepted |

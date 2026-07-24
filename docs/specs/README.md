@@ -20,3 +20,5 @@ Specs are added as each kernel subsystem is designed and implemented:
 - [`memory.md`](memory.md)
 - [`workflow.md`](workflow.md)
 - [`agents.md`](agents.md)
+- [`security.md`](security.md)
+- [`observability.md`](observability.md)

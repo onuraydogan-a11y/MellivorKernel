@@ -7,7 +7,7 @@ as a living document rather than frozen inside one release's notes.
 release actually shipped; this file is where roadmap content should be
 updated going forward.
 
-Status as of Sprint 13A: Sprints 1–5 shipped `core`, `config`, `providers`
+Status as of Sprint 16: Sprints 1–5 shipped `core`, `config`, `providers`
 (interfaces only, no concrete implementation), `tools`, and `bootstrap`.
 Sprint 6 shipped `execution` (Execution Core) — see
 [ADR-0006](../adr/0006-execution-core-orchestration-layer.md). Sprint 7 was
@@ -49,6 +49,34 @@ entirely to `WorkflowEngine`, completing the chain
 Agent → Workflow → Execution → Tool/Provider. No planning, reasoning,
 reflection, or multi-agent composition yet — see
 [ADR-0011](../adr/0011-agent-runtime-core-and-orchestration-chain.md).
+Sprint 14 was **Integration Gate #2**, an unscheduled validation sprint (per
+[CLAUDE.md](../../CLAUDE.md) §14) that audited the `v0.13.0` release
+candidate end-to-end — package boundaries, dependency direction, public
+exports, bootstrap composition, documentation, and dead code — and found no
+defect requiring a code or architecture change; see
+[`docs/release/release-audit.md`](../release/release-audit.md). The audit's
+own "Release Risks" section named Security primitives and Observability as
+the two largest remaining gaps toward `1.0.0`, which Sprints 15 and 16
+addressed. Sprint 15 shipped a dedicated **Security Foundation**
+(`security`) — `Secret`, `SecretProvider`, `SecretProviderRegistry`,
+`SecurityPolicy`, `SecurityDecision`, `SecureConfiguration`, `AuditRecord`,
+`AuditSink`, and the subsystem's exceptions — a contracts-and-primitives-only
+package, deliberately not implementing authentication, OAuth, SSO, RBAC, or
+any concrete secret backend, and structurally separate from `execution`,
+`workflow`, `agents`, and `providers` — see
+[ADR-0012](../adr/0012-security-foundation.md). It depends only on `core`
+(for the shared `KernelError` base) and is not yet consumed by any other
+subsystem. Sprint 16 shipped a dedicated **Observability Foundation**
+(`observability`) — `ObservationContext`, `MetricsRecorder`,
+`TraceRecorder`/`TraceSpan`, `StructuredEventSink`/
+`StructuredObservationEvent`, no-op default implementations, and the
+`Observability` dependency-injection wrapper — again contracts-and-no-op-only,
+not a telemetry platform, with no exporter, backend, or vendor integration —
+see [ADR-0013](../adr/0013-observability-foundation.md). Unlike `security`,
+it has no dependency on any other kernel package, including `core`. Neither
+foundation is wired into `execution`, `authorization`, `workflow`, `agents`,
+or `bootstrap` yet; both remain available for a future sprint to consume
+once a concrete use case dogfoods them, per [CLAUDE.md](../../CLAUDE.md) §13.
 What follows is the approved recommendation for the remaining sprints.
 
 Recommendation, not a decision — architecture and sprint sequencing remain
@@ -66,9 +94,14 @@ first, `agents`/`workflow` last since they're consumers of everything else.
 | 11 | **Memory abstraction** (`memory`), shipped | No dependencies beyond `core`; needed by `agents` for state/context persistence, and now proven usable by `execution` for recording outcomes without any provider dependency in either direction. |
 | 12 | ~~Plugin loading (`plugins`)~~ → **Workflow engine** (`workflow`), shipped | Re-sequenced ahead of plugin loading and agent lifecycle: composes `execution`/`memory`/`events` (all already shipped) into sequential multi-step runs, proving the orchestration/execution boundary (ADR-0010) before `agents` is built on top of either. |
 | 13A | ~~Plugin loading (`plugins`)~~ → **Agent Runtime Core** (`agents`), shipped | Re-sequenced ahead of plugin loading again: a minimal, single-workflow agent runtime completes the orchestration chain (ADR-0011) while `workflow` is still fresh, before plugin loading (an unrelated, lower-priority capability) or richer agent behavior (planning, multi-agent) are attempted. |
+| 14 | **Integration Gate #2** — `v0.13.0` release-candidate audit, shipped | Inserted per CLAUDE.md §14, the same rationale as Sprint 7's gate: validate the release candidate spanning Sprints 1–13A end-to-end before more infrastructure is layered on top of it. Found no defect; named Security primitives and Observability as the two highest-priority remaining gaps, which Sprints 15–16 addressed. |
+| 15 | ~~Plugin loading (`plugins`)~~ → **Security Foundation** (`security`), shipped | Re-sequenced ahead of plugin loading: places ADR-0002's named-but-only-partially-placed "Security primitives" responsibility with a reusable, business-agnostic contract surface (secrets, policy, audit) a future product or subsystem can build on, per Integration Gate #2's top risk finding. Foundation-only — no concrete secret backend, authentication, or RBAC — see ADR-0012. |
+| 16 | ~~Plugin loading (`plugins`)~~ → **Observability Foundation** (`observability`), shipped | Re-sequenced ahead of plugin loading again: places ADR-0002's named-but-unplaced "Observability" responsibility beyond the structured logging shipped in Sprint 2, per Integration Gate #2's second-highest risk finding. Foundation-only — no metrics/tracing backend or vendor integration — see ADR-0013. |
 
-**Beyond sprint 13A (not scheduled):** **Plugin loading** (`plugins`, no
-dependencies beyond `core`, benefits from `events` already existing),
+**Beyond sprint 16 (not scheduled):** **Plugin loading** (`plugins`, no
+dependencies beyond `core`, benefits from `events` already existing —
+deferred for the third consecutive sprint slot in favor of Security and
+Observability foundations, per Integration Gate #2's risk ordering),
 richer agent capabilities (planning, reasoning, reflection, multi-agent
 composition, dynamic workflow selection — all deliberately deferred past
 Sprint 13A), additional concrete providers (OpenAI, Gemini, Ollama —
@@ -76,8 +109,14 @@ explicitly out of scope for Sprint 10), a provider-side memory-consumption
 mechanism (a provider reading prior memory as conversation context),
 dynamic workflow steps (a step's request built from an earlier step's
 result — deliberately not built in Sprint 12), parallel/scheduled workflow
-execution, embeddings/vector search/RAG for `memory`, the remainder of
-**Security primitives** (secrets management, encryption, audit trail), and
-the remainder of **observability** (tracing, metrics, and building on top
-of `events` for a trace/audit consumer) — all still open per ADR-0002,
-with no placement decided.
+execution, embeddings/vector search/RAG for `memory`, dogfooding the
+Sprint 15/16 foundations into an existing subsystem (e.g. `authorization`
+recording through `security.AuditSink`, `execution` emitting through
+`observability.StructuredEventSink`) before either is considered proven,
+and the remainder of **Security primitives** beyond the Sprint 15
+foundation (a concrete `SecretProvider` backend, authentication, OAuth,
+SSO, RBAC, encryption) and the remainder of **Observability** beyond the
+Sprint 16 foundation (a concrete metrics/tracing backend or vendor
+integration, and a trace/audit consumer built on top of `events`) — all
+still open per ADR-0002, with no placement decided beyond the foundation
+contracts Sprints 15–16 already placed.
