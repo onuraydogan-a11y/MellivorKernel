@@ -4,19 +4,21 @@ Status: Release Candidate (v0.13.0). `core`, `config`, `tools`,
 `providers` (interfaces plus the `ClaudeProvider` reference
 implementation), `bootstrap`, `execution`, `authorization`, `events`,
 `memory`, `workflow`, a first slice of `agents`, and foundation-only
-`security`, `observability`, and `plugins` packages are implemented — see
-each subsystem's entry below and its own spec in `docs/specs/` for what
-"implemented" covers and excludes. `agents` is a first, deliberately
-minimal slice; `security` and `observability` are
+`security`, `observability`, `plugins`, and `plugin_sdk` packages are
+implemented — see each subsystem's entry below and its own spec in
+`docs/specs/` for what "implemented" covers and excludes. `agents` is a
+first, deliberately minimal slice; `security` and `observability` are
 contracts-and-primitives-only foundations with no concrete secret
 backend, authentication model, metrics/tracing vendor, or telemetry
 export yet; `plugins` is a runtime-primitives-only foundation with no
-built-in plugin and no filesystem or entry-point discovery yet. As of
-Sprint 17, the security/observability foundations have their first
-production consumers — `authorization` records grant/deny decisions
-through `security.AuditSink`, and `execution` emits lifecycle
-observations through `observability.StructuredEventSink` — but no other
-subsystem consumes either, and nothing yet consumes `plugins`. See
+built-in plugin and no filesystem or entry-point discovery yet;
+`plugin_sdk` is a developer-convenience layer over `plugins` adding no
+new contract or validation rule of its own. As of Sprint 17, the
+security/observability foundations have their first production
+consumers — `authorization` records grant/deny decisions through
+`security.AuditSink`, and `execution` emits lifecycle observations
+through `observability.StructuredEventSink` — but no other subsystem
+consumes either, and nothing yet consumes `plugins` or `plugin_sdk`. See
 `docs/release/v1.0-release-checklist.md` for the full release-readiness
 assessment.
 
@@ -140,7 +142,9 @@ Per ADR-0002, the kernel's responsibilities are limited to exactly:
   `PluginLifecycle` state management — was implemented in Sprint 18.
   Foundation-only: no built-in plugin ships with the kernel, and no
   filesystem or entry-point discovery is implemented yet — a caller
-  supplies an explicit `PluginManifest` and constructor. See
+  supplies an explicit `PluginManifest` and constructor. A
+  developer-convenience layer over this runtime, `plugin_sdk`, was added
+  in Sprint 19 — see "The Plugin SDK" section below. See
   [`docs/specs/plugins.md`](specs/plugins.md) and
   [ADR-0014](adr/0014-plugin-runtime-foundation.md).
 
@@ -320,6 +324,28 @@ dependency back on `agents`. The full chain is now
 Agent → Workflow → Execution → Tool/Provider, one direction only. See
 [`docs/specs/agents.md`](specs/agents.md) and
 [ADR-0011](adr/0011-agent-runtime-core-and-orchestration-chain.md).
+
+## The Plugin SDK (`src/mellivor_kernel/plugin_sdk/`)
+
+`plugin_sdk` is a top-level package, a peer to `bootstrap`/`execution`
+rather than one of the seven subsystems in the diagram above, implemented
+in Sprint 19: a developer-facing convenience layer over the Plugin
+Runtime Foundation (`plugins`, Sprint 18). It does not add any new
+contract, validation rule, or capability — `PluginBuilder` and the
+`create_*` helpers construct `PluginManifest`/`PluginMetadata`/
+`PluginCapability` by delegating directly to those classes' own
+constructors, `BasePlugin` supplies no-op lifecycle defaults over the
+same `Plugin` contract, and the `is_valid_*` helpers catch
+`PluginValidationError` rather than re-implementing any check. See
+[`docs/specs/plugin_sdk.md`](specs/plugin_sdk.md) and
+[ADR-0015](adr/0015-plugin-sdk-foundation.md).
+
+`plugin_sdk` depends only on `plugins` (and, where needed, `core`) —
+never on `execution`, `providers`, `workflow`, `authorization`, `memory`,
+`observability`, `security`, or `bootstrap`. No other subsystem imports
+it; it has no dependents, the same position `plugins` itself holds.
+Plugin discovery, a marketplace, sandboxing, and filesystem loading
+remain out of scope, unchanged from ADR-0014.
 
 ## Consumption model
 

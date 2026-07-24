@@ -44,3 +44,4 @@ Small, local, easily reversible choices do not need an ADR.
 | [0012](0012-security-foundation.md) | Introduce a dedicated `security` subsystem for reusable kernel security primitives | Accepted |
 | [0013](0013-observability-foundation.md) | Introduce a dedicated `observability` subsystem for reusable kernel observability primitives | Accepted |
 | [0014](0014-plugin-runtime-foundation.md) | Plugin Runtime Foundation | Accepted |
+| [0015](0015-plugin-sdk-foundation.md) | Plugin SDK Foundation | Accepted |

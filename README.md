@@ -86,6 +86,7 @@ src/mellivor_kernel/
     authorization/   Permission-based authorization for execution requests
     security/        Security foundation: secrets, policy, secure config, audit contracts
     observability/   Observability foundation: metrics/tracing/event contracts, no-ops
+    plugin_sdk/      Plugin SDK: builder, base plugin, creation/validation helpers
 docs/architecture.md  High-level architecture
 docs/architecture/    Principles and roadmap
 docs/adr/            Architecture Decision Records
@@ -137,7 +138,9 @@ are foundation-only — contracts and primitives with no concrete secret
 backend, authentication, encryption, metrics/tracing vendor, telemetry
 export, built-in plugin, or filesystem/entry-point discovery, and none
 of the three is consumed by any other subsystem except where Sprint 17
-wired `security`/`observability` into `authorization`/`execution`). See
+wired `security`/`observability` into `authorization`/`execution`;
+`plugin_sdk` is a convenience layer over `plugins` with no consumer of
+its own). See
 [`docs/release/v1.0-release-checklist.md`](docs/release/v1.0-release-checklist.md)
 for the complete release-readiness assessment, including known
 limitations.
@@ -190,7 +193,7 @@ composition yet; see
 [ADR-0011](docs/adr/0011-agent-runtime-core-and-orchestration-chain.md)) —
 see [`docs/specs/`](docs/specs/README.md) for their public contracts.
 
-Three further foundation-only packages are also implemented: `security`
+Four further foundation-only packages are also implemented: `security`
 (`Secret`, `SecretProvider`, `SecretProviderRegistry`, `SecurityPolicy`,
 `SecurityDecision`, `SecureConfiguration`, `AuditRecord`, `AuditSink` —
 reusable security contracts and primitives, depending only on `core`; no
@@ -208,12 +211,18 @@ registered, and run through, depending only on `core` and the top-level
 `version` module; no built-in plugin ships, and no filesystem or
 entry-point discovery exists yet — a caller supplies an explicit
 `PluginManifest` and constructor; see
-[ADR-0014](docs/adr/0014-plugin-runtime-foundation.md)). `security` and
-`observability` are dependency-injected and structurally separate from
-`execution`, `workflow`, `agents`, and `providers`; as of Sprint 17,
-`authorization` and `execution` are their first consumers (see below).
-`plugins` has no consumer yet — no other subsystem imports it, and it
-imports none of them.
+[ADR-0014](docs/adr/0014-plugin-runtime-foundation.md)), and
+`plugin_sdk` (`PluginBuilder`, `BasePlugin`, `create_capability`/
+`create_manifest`/`create_metadata`, `is_valid_capability`/
+`is_valid_manifest`/`is_valid_metadata` — a developer-convenience layer
+over `plugins`, depending only on it; adds no new contract or validation
+rule of its own — every helper delegates to the corresponding `plugins`
+constructor; see [ADR-0015](docs/adr/0015-plugin-sdk-foundation.md)).
+`security` and `observability` are dependency-injected and structurally
+separate from `execution`, `workflow`, `agents`, and `providers`; as of
+Sprint 17, `authorization` and `execution` are their first consumers (see
+below). Neither `plugins` nor `plugin_sdk` has a consumer yet — no other
+subsystem imports either, and `plugin_sdk` imports only `plugins`.
 
 Bootstrap does not yet wire the newer engines (`ExecutionEngine`,
 `AuthorizationEngine`, `WorkflowEngine`, `AgentEngine`) together
