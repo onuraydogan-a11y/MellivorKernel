@@ -22,3 +22,4 @@ Specs are added as each kernel subsystem is designed and implemented:
 - [`agents.md`](agents.md)
 - [`security.md`](security.md)
 - [`observability.md`](observability.md)
+- [`plugins.md`](plugins.md)

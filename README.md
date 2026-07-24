@@ -78,7 +78,7 @@ src/mellivor_kernel/
     memory/          Memory abstraction
     tools/           Tool execution
     events/          Event bus
-    plugins/         Plugin loading
+    plugins/         Plugin runtime foundation: contracts, manifest, registry, loader, lifecycle
     config/          Configuration
     providers/       Multi-LLM provider abstraction
     bootstrap/       Composition layer: assembles core/config/providers/tools
@@ -131,12 +131,13 @@ pull request against `main`, on Python 3.12 and 3.13.
 **Release Candidate (v0.13.0).** Not yet `1.0.0` — per
 [ADR-0005](docs/adr/0005-versioning-strategy.md), that version number is
 reserved for an explicit future decision once every responsibility in
-ADR-0002 is stable, which is not yet the case (`plugins` is unimplemented;
-`agents` is a first, deliberately minimal slice; `security` and
-`observability` are foundation-only — contracts and no-op primitives, no
-concrete secret backend, authentication, encryption, metrics/tracing
-vendor, or telemetry export, and neither is consumed by any other
-subsystem yet). See
+ADR-0002 is stable, which is not yet the case (`agents` is a first,
+deliberately minimal slice; `security`, `observability`, and `plugins`
+are foundation-only — contracts and primitives with no concrete secret
+backend, authentication, encryption, metrics/tracing vendor, telemetry
+export, built-in plugin, or filesystem/entry-point discovery, and none
+of the three is consumed by any other subsystem except where Sprint 17
+wired `security`/`observability` into `authorization`/`execution`). See
 [`docs/release/v1.0-release-checklist.md`](docs/release/v1.0-release-checklist.md)
 for the complete release-readiness assessment, including known
 limitations.
@@ -189,25 +190,35 @@ composition yet; see
 [ADR-0011](docs/adr/0011-agent-runtime-core-and-orchestration-chain.md)) —
 see [`docs/specs/`](docs/specs/README.md) for their public contracts.
 
-Two further foundation-only packages are also implemented: `security`
+Three further foundation-only packages are also implemented: `security`
 (`Secret`, `SecretProvider`, `SecretProviderRegistry`, `SecurityPolicy`,
 `SecurityDecision`, `SecureConfiguration`, `AuditRecord`, `AuditSink` —
 reusable security contracts and primitives, depending only on `core`; no
 concrete secret backend, authentication, OAuth, SSO, RBAC, or encryption;
-see [ADR-0012](docs/adr/0012-security-foundation.md)) and `observability`
+see [ADR-0012](docs/adr/0012-security-foundation.md)), `observability`
 (`ObservationContext`, `MetricsRecorder`, `TraceRecorder`/`TraceSpan`,
 `StructuredEventSink`/`StructuredObservationEvent`, no-op default
 implementations, and the `Observability` DI wrapper — depending on no
 other kernel package; no metrics/tracing backend or telemetry export; see
-[ADR-0013](docs/adr/0013-observability-foundation.md)). Both are
-dependency-injected, structurally separate from `execution`, `workflow`,
-`agents`, and `providers`, and not yet consumed by any other subsystem.
+[ADR-0013](docs/adr/0013-observability-foundation.md)), and `plugins`
+(`Plugin`, `PluginMetadata`, `PluginContext`, `PluginCapability`,
+`PluginManifest`, `PluginRegistry`, `PluginLoader`, `PluginLifecycle`/
+`PluginLifecycleState` — the runtime a plugin is loaded, validated,
+registered, and run through, depending only on `core` and the top-level
+`version` module; no built-in plugin ships, and no filesystem or
+entry-point discovery exists yet — a caller supplies an explicit
+`PluginManifest` and constructor; see
+[ADR-0014](docs/adr/0014-plugin-runtime-foundation.md)). `security` and
+`observability` are dependency-injected and structurally separate from
+`execution`, `workflow`, `agents`, and `providers`; as of Sprint 17,
+`authorization` and `execution` are their first consumers (see below).
+`plugins` has no consumer yet — no other subsystem imports it, and it
+imports none of them.
 
-`plugins` remains an unimplemented package skeleton. Bootstrap does not
-yet wire the newer engines (`ExecutionEngine`, `AuthorizationEngine`,
-`WorkflowEngine`, `AgentEngine`) together automatically — a consumer
-composes them explicitly, as every example in [`examples/`](examples/)
-does.
+Bootstrap does not yet wire the newer engines (`ExecutionEngine`,
+`AuthorizationEngine`, `WorkflowEngine`, `AgentEngine`) together
+automatically — a consumer composes them explicitly, as every example in
+[`examples/`](examples/) does.
 
 ## Contributing
 

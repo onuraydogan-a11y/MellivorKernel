@@ -4,17 +4,19 @@ Status: Release Candidate (v0.13.0). `core`, `config`, `tools`,
 `providers` (interfaces plus the `ClaudeProvider` reference
 implementation), `bootstrap`, `execution`, `authorization`, `events`,
 `memory`, `workflow`, a first slice of `agents`, and foundation-only
-`security` and `observability` packages are implemented — see each
-subsystem's entry below and its own spec in `docs/specs/` for what
-"implemented" covers and excludes. `plugins` remains an unimplemented
-skeleton; `agents` is a first, deliberately minimal slice; `security` and
-`observability` are contracts-and-primitives-only foundations with no
-concrete secret backend, authentication model, metrics/tracing vendor, or
-telemetry export yet. As of Sprint 17, both foundations have their first
+`security`, `observability`, and `plugins` packages are implemented — see
+each subsystem's entry below and its own spec in `docs/specs/` for what
+"implemented" covers and excludes. `agents` is a first, deliberately
+minimal slice; `security` and `observability` are
+contracts-and-primitives-only foundations with no concrete secret
+backend, authentication model, metrics/tracing vendor, or telemetry
+export yet; `plugins` is a runtime-primitives-only foundation with no
+built-in plugin and no filesystem or entry-point discovery yet. As of
+Sprint 17, the security/observability foundations have their first
 production consumers — `authorization` records grant/deny decisions
 through `security.AuditSink`, and `execution` emits lifecycle
 observations through `observability.StructuredEventSink` — but no other
-subsystem consumes either yet. See
+subsystem consumes either, and nothing yet consumes `plugins`. See
 `docs/release/v1.0-release-checklist.md` for the full release-readiness
 assessment.
 
@@ -132,7 +134,15 @@ Per ADR-0002, the kernel's responsibilities are limited to exactly:
   [ADR-0008](adr/0008-event-bus-and-lifecycle-events.md).
 
 - **`plugins`** — Plugin loading: discovery, registration, and lifecycle of
-  pluggable extensions to the kernel.
+  pluggable extensions to the kernel. The runtime foundation — contracts
+  (`Plugin`, `PluginMetadata`, `PluginContext`, `PluginCapability`), an
+  immutable `PluginManifest`, `PluginRegistry`, `PluginLoader`, and
+  `PluginLifecycle` state management — was implemented in Sprint 18.
+  Foundation-only: no built-in plugin ships with the kernel, and no
+  filesystem or entry-point discovery is implemented yet — a caller
+  supplies an explicit `PluginManifest` and constructor. See
+  [`docs/specs/plugins.md`](specs/plugins.md) and
+  [ADR-0014](adr/0014-plugin-runtime-foundation.md).
 
 - **`config`** — Configuration: contracts for configuration and environment
   loading (including feature flags), kept separate so products can supply
