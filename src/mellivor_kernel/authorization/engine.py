@@ -10,6 +10,7 @@ from mellivor_kernel.authorization.result import AuthorizationResult
 from mellivor_kernel.events import Event, EventBus
 from mellivor_kernel.execution.context import ExecutionContext
 from mellivor_kernel.execution.request import ExecutionRequest
+from mellivor_kernel.security import AuditRecord, AuditSink, SecurityDecision
 from mellivor_kernel.tools.exceptions import ToolValidationError
 from mellivor_kernel.tools.permissions import Permission, missing_permissions
 
@@ -32,14 +33,23 @@ class AuthorizationEngine:
       calls, satisfying
       :class:`~mellivor_kernel.execution.contracts.Authorizer` structurally.
       It translates an ``ExecutionRequest`` into an
-      ``AuthorizationRequest``, delegates to :meth:`authorize`, and
-      publishes :class:`~mellivor_kernel.authorization.events.AuthorizationGranted`
+      ``AuthorizationRequest``, delegates to :meth:`authorize`, publishes
+      :class:`~mellivor_kernel.authorization.events.AuthorizationGranted`
       or :class:`~mellivor_kernel.authorization.events.AuthorizationDenied`
-      when an :class:`~mellivor_kernel.events.bus.EventBus` is configured.
+      when an :class:`~mellivor_kernel.events.bus.EventBus` is configured,
+      and records the same decision as an
+      :class:`~mellivor_kernel.security.audit.AuditRecord` when an
+      :class:`~mellivor_kernel.security.audit.AuditSink` is configured --
+      through the abstract ``AuditSink`` Protocol only, never a concrete
+      sink; see ADR-0012.
     """
 
     def __init__(
-        self, permission_resolver: PermissionResolver, *, event_bus: EventBus | None = None
+        self,
+        permission_resolver: PermissionResolver,
+        *,
+        event_bus: EventBus | None = None,
+        audit_sink: AuditSink | None = None,
     ) -> None:
         """Initialize the engine.
 
@@ -48,9 +58,14 @@ class AuthorizationEngine:
                 given target/operation.
             event_bus: The bus decision events are published to. If
                 ``None`` (the default), no events are published.
+            audit_sink: The sink grant/deny decisions are recorded to, in
+                addition to ``event_bus``. If ``None`` (the default),
+                nothing is recorded -- identical to this engine's behavior
+                before the security foundation existed.
         """
         self._permission_resolver = permission_resolver
         self._event_bus = event_bus
+        self._audit_sink = audit_sink
 
     def authorize(self, request: AuthorizationRequest) -> AuthorizationResult:
         """Decide whether ``request`` is authorized.
@@ -115,6 +130,7 @@ class AuthorizationEngine:
                     reason=result.reason or "",
                 )
             )
+            self._audit(request, result)
             return result
 
         result = self.authorize(
@@ -152,6 +168,7 @@ class AuthorizationEngine:
                     reason=result.reason or "",
                 )
             )
+        self._audit(request, result)
 
         return result
 
@@ -159,3 +176,24 @@ class AuthorizationEngine:
         """Publish ``event`` if an :class:`~mellivor_kernel.events.bus.EventBus` is configured."""
         if self._event_bus is not None:
             self._event_bus.publish(event)
+
+    def _audit(self, request: ExecutionRequest, result: AuthorizationResult) -> None:
+        """Record ``result`` as an :class:`AuditRecord` if an
+        :class:`~mellivor_kernel.security.audit.AuditSink` is configured.
+
+        ``subject`` is ``request.request_id`` (the same correlation key
+        ``AuthorizationGranted``/``AuthorizationDenied`` use) and ``action``
+        is ``"<target>:<operation>"``, so a recorded audit entry always
+        names both what was evaluated and which request it belongs to,
+        without changing :class:`AuditRecord`'s existing shape.
+        """
+        if self._audit_sink is None:
+            return
+        self._audit_sink.record(
+            AuditRecord(
+                event="authorization.granted" if result.granted else "authorization.denied",
+                subject=request.request_id,
+                action=f"{request.target.value}:{request.operation}",
+                decision=SecurityDecision(allowed=result.granted, reason=result.reason or ""),
+            )
+        )

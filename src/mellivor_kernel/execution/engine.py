@@ -10,6 +10,11 @@ from mellivor_kernel.execution.events import ExecutionCompleted, ExecutionFailed
 from mellivor_kernel.execution.request import ExecutionRequest
 from mellivor_kernel.execution.result import ExecutionResult
 from mellivor_kernel.memory import MemoryEntry, MemoryStore
+from mellivor_kernel.observability import (
+    ObservationContext,
+    StructuredEventSink,
+    StructuredObservationEvent,
+)
 
 
 class ExecutionEngine:
@@ -40,6 +45,15 @@ class ExecutionEngine:
     lifecycle above -- again through the abstract ``EventBus`` Protocol
     only, never a concrete bus implementation.
 
+    When an :class:`~mellivor_kernel.observability.contracts.StructuredEventSink`
+    is configured, the engine emits one
+    :class:`~mellivor_kernel.observability.events.StructuredObservationEvent`
+    per lifecycle point above, in addition to (never instead of) the
+    ``EventBus`` publication -- both mechanisms observe the same three
+    lifecycle points, correlated by ``request.request_id``. The engine
+    depends only on the abstract ``StructuredEventSink`` Protocol, never a
+    concrete sink; see ADR-0013.
+
     When a :class:`~mellivor_kernel.memory.store.MemoryStore` is
     configured, the engine records every execution's outcome as a
     :class:`~mellivor_kernel.memory.entry.MemoryEntry` (keyed by
@@ -60,6 +74,7 @@ class ExecutionEngine:
         authorizer: Authorizer | None = None,
         event_bus: EventBus | None = None,
         memory: MemoryStore | None = None,
+        observability: StructuredEventSink | None = None,
     ) -> None:
         """Initialize the engine.
 
@@ -78,11 +93,17 @@ class ExecutionEngine:
             memory: The store execution outcomes are recorded to. If
                 ``None`` (the default), nothing is recorded -- identical
                 to this engine's behavior before memory existed.
+            observability: The structured event sink lifecycle
+                observations are emitted to, in addition to ``event_bus``.
+                If ``None`` (the default), nothing is emitted -- identical
+                to this engine's behavior before the observability
+                foundation existed.
         """
         self._dispatcher = dispatcher
         self._authorizer = authorizer
         self._event_bus = event_bus
         self._memory = memory
+        self._observability = observability
 
     def execute(
         self,
@@ -120,6 +141,11 @@ class ExecutionEngine:
             ExecutionStarted(
                 request_id=request.request_id, target=request.target, operation=request.operation
             )
+        )
+        self._observe(
+            "execution.started",
+            f"Executing request {request.request_id}.",
+            request=request,
         )
 
         effective_permissions: frozenset[str] = frozenset()
@@ -171,16 +197,29 @@ class ExecutionEngine:
                     execution_time_seconds=result.execution_time_seconds,
                 )
             )
+            self._observe(
+                "execution.completed",
+                f"Request {request.request_id} completed successfully.",
+                request=request,
+                attributes={"execution_time_seconds": result.execution_time_seconds},
+            )
         else:
             stage = result.metadata.get("stage")
+            stage = stage if isinstance(stage, str) else None
             self._publish(
                 ExecutionFailed(
                     request_id=request.request_id,
                     target=request.target,
                     operation=request.operation,
                     error=result.error or "",
-                    stage=stage if isinstance(stage, str) else None,
+                    stage=stage,
                 )
+            )
+            self._observe(
+                "execution.failed",
+                f"Request {request.request_id} failed: {result.error}",
+                request=request,
+                attributes={"error": result.error, "stage": stage},
             )
         self._remember(request, result, context)
         return result
@@ -189,6 +228,36 @@ class ExecutionEngine:
         """Publish ``event`` if an :class:`~mellivor_kernel.events.bus.EventBus` is configured."""
         if self._event_bus is not None:
             self._event_bus.publish(event)
+
+    def _observe(
+        self,
+        name: str,
+        message: str,
+        *,
+        request: ExecutionRequest,
+        attributes: dict[str, object] | None = None,
+    ) -> None:
+        """Emit a :class:`StructuredObservationEvent` if a
+        :class:`~mellivor_kernel.observability.contracts.StructuredEventSink`
+        is configured.
+
+        Correlated with the ``EventBus`` events for the same request via
+        ``request.request_id`` as the observation's correlation id.
+        """
+        if self._observability is None:
+            return
+        self._observability.emit(
+            StructuredObservationEvent(
+                name=name,
+                message=message,
+                context=ObservationContext.new(correlation_id=request.request_id),
+                attributes={
+                    "target": request.target.value,
+                    "operation": request.operation,
+                    **(attributes or {}),
+                },
+            )
+        )
 
     def _remember(
         self, request: ExecutionRequest, result: ExecutionResult, context: ExecutionContext

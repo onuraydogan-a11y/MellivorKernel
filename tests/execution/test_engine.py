@@ -19,6 +19,7 @@ from mellivor_kernel.execution import (
     ExecutionTarget,
 )
 from mellivor_kernel.memory import InMemoryStore, MemoryStore
+from mellivor_kernel.observability import StructuredObservationEvent
 from mellivor_kernel.providers import ProviderRegistry
 from mellivor_kernel.tools import ToolRegistry
 from mellivor_kernel.tools.builtin import EchoTool
@@ -96,6 +97,20 @@ class _RecordingEventBus:
 
     def unsubscribe(self, registration: EventRegistration) -> None:
         raise NotImplementedError
+
+
+class _RecordingObservabilitySink:
+    """A minimal object satisfying `StructuredEventSink` structurally,
+    deliberately not `NoOpStructuredEventSink` -- proving `ExecutionEngine`
+    only depends on the Protocol shape.
+    """
+
+    def __init__(self) -> None:
+        self.emitted: list[StructuredObservationEvent] = []
+
+    def emit(self, event: object) -> None:
+        assert isinstance(event, StructuredObservationEvent)
+        self.emitted.append(event)
 
 
 def _make_context() -> ExecutionContext:
@@ -377,3 +392,88 @@ def test_engine_swallows_a_failing_memory_backend() -> None:
     )
 
     assert result.success is True  # the failing memory backend never breaks execution
+
+
+def test_engine_without_observability_configured_emits_nothing() -> None:
+    """No observability sink configured: identical to this engine's
+    pre-Sprint-17 behavior -- no structured events, no error.
+    """
+    engine = _make_engine()
+
+    result = engine.execute(
+        ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo"), _make_context()
+    )
+
+    assert result.success is True  # no observability sink wired in, nothing to assert on it
+
+
+def test_engine_emits_started_then_completed_observations_on_success() -> None:
+    tool_registry = ToolRegistry()
+    tool_registry.register(EchoTool())
+    dispatcher = Dispatcher(tool_registry, ProviderRegistry())
+    sink = _RecordingObservabilitySink()
+    engine = ExecutionEngine(dispatcher, observability=sink)
+
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo", payload={"x": 1})
+    engine.execute(request, _make_context())
+
+    assert [event.name for event in sink.emitted] == ["execution.started", "execution.completed"]
+    started, completed = sink.emitted
+    assert started.context.correlation_id == request.request_id == completed.context.correlation_id
+    assert started.attributes["operation"] == "echo"
+    assert completed.attributes["execution_time_seconds"] >= 0.0
+
+
+def test_engine_emits_started_then_failed_observations_on_dispatch_failure() -> None:
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
+    sink = _RecordingObservabilitySink()
+    dispatcher = Dispatcher(ToolRegistry(), ProviderRegistry())
+    engine = ExecutionEngine(dispatcher, observability=sink)
+
+    engine.execute(request, _make_context())
+
+    assert [event.name for event in sink.emitted] == ["execution.started", "execution.failed"]
+    failed = sink.emitted[1]
+    assert failed.attributes["error"] is not None
+    assert failed.attributes["stage"] is None
+
+
+def test_engine_emits_failed_observation_with_authorization_stage_on_denial() -> None:
+    tool_registry = ToolRegistry()
+    tool_registry.register(EchoTool())
+    dispatcher = Dispatcher(tool_registry, ProviderRegistry())
+    sink = _RecordingObservabilitySink()
+    authorizer = _FakeAuthorizer(granted=False, reason="denied by policy")
+    engine = ExecutionEngine(dispatcher, authorizer=authorizer, observability=sink)
+
+    engine.execute(ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo"), _make_context())
+
+    assert [event.name for event in sink.emitted] == ["execution.started", "execution.failed"]
+    failed = sink.emitted[1]
+    assert failed.attributes["stage"] == "authorization"
+    assert failed.attributes["error"] == "denied by policy"
+
+
+def test_engine_publishes_to_event_bus_and_observability_identically() -> None:
+    """Proves both mechanisms observe the same three lifecycle points for
+    the same request, wired side by side with no interaction between them.
+    """
+    tool_registry = ToolRegistry()
+    tool_registry.register(EchoTool())
+    dispatcher = Dispatcher(tool_registry, ProviderRegistry())
+    event_bus = _RecordingEventBus()
+    sink = _RecordingObservabilitySink()
+    engine = ExecutionEngine(dispatcher, event_bus=event_bus, observability=sink)
+
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo", payload={"x": 1})
+    engine.execute(request, _make_context())
+
+    assert len(event_bus.published) == len(sink.emitted) == 2
+    assert [type(event) for event in event_bus.published] == [
+        ExecutionStarted,
+        ExecutionCompleted,
+    ]
+    assert [event.name for event in sink.emitted] == ["execution.started", "execution.completed"]
+    bus_request_ids = {event.request_id for event in event_bus.published}  # type: ignore[attr-defined]
+    assert bus_request_ids == {request.request_id}
+    assert {event.context.correlation_id for event in sink.emitted} == {request.request_id}

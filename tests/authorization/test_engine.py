@@ -18,6 +18,7 @@ from mellivor_kernel.authorization import (
 from mellivor_kernel.core import Kernel, ServiceContainer, get_logger
 from mellivor_kernel.events import Event, EventHandler, EventRegistration
 from mellivor_kernel.execution import ExecutionContext, ExecutionRequest, ExecutionTarget
+from mellivor_kernel.security import AuditRecord
 from mellivor_kernel.tools import ToolRegistry
 from mellivor_kernel.tools.builtin import EchoTool, HealthCheckTool
 from mellivor_kernel.tools.permissions import (
@@ -60,6 +61,19 @@ class _RecordingEventBus:
 
     def unsubscribe(self, registration: EventRegistration) -> None:
         raise NotImplementedError
+
+
+class _RecordingAuditSink:
+    """A minimal object satisfying `AuditSink` structurally, deliberately
+    not a real sink implementation -- proving `AuthorizationEngine` only
+    depends on the Protocol shape.
+    """
+
+    def __init__(self) -> None:
+        self.recorded: list[AuditRecord] = []
+
+    def record(self, record: AuditRecord) -> None:
+        self.recorded.append(record)
 
 
 def _make_context() -> ExecutionContext:
@@ -291,3 +305,90 @@ def test_check_without_an_event_bus_publishes_nothing() -> None:
     result = engine.check(request, _make_context(), granted_permissions=frozenset())
 
     assert result.granted is True  # no event bus wired in, nothing to assert on it
+
+
+# -- audit recording -----------------------------------------------------------
+
+
+def test_authorize_never_records_audit() -> None:
+    """`authorize()` is a pure decision function -- audit recording is
+    `check()`'s responsibility only, matching event publication.
+    """
+    audit_sink = _RecordingAuditSink()
+    engine = AuthorizationEngine(PermissionResolver(_make_registry()), audit_sink=audit_sink)
+
+    engine.authorize(AuthorizationRequest(target=ExecutionTarget.TOOL, operation="echo"))
+
+    assert audit_sink.recorded == []
+
+
+def test_check_records_an_audit_entry_on_grant() -> None:
+    audit_sink = _RecordingAuditSink()
+    engine = AuthorizationEngine(PermissionResolver(_make_registry()), audit_sink=audit_sink)
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="health_check")
+
+    engine.check(request, _make_context(), granted_permissions=frozenset({"kernel.internal"}))
+
+    assert len(audit_sink.recorded) == 1
+    record = audit_sink.recorded[0]
+    assert record.event == "authorization.granted"
+    assert record.subject == request.request_id
+    assert record.action == "tool:health_check"
+    assert record.decision.allowed is True
+
+
+def test_check_records_an_audit_entry_on_denial_for_missing_permissions() -> None:
+    audit_sink = _RecordingAuditSink()
+    engine = AuthorizationEngine(PermissionResolver(_make_registry()), audit_sink=audit_sink)
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="health_check")
+
+    engine.check(request, _make_context(), granted_permissions=frozenset())
+
+    assert len(audit_sink.recorded) == 1
+    record = audit_sink.recorded[0]
+    assert record.event == "authorization.denied"
+    assert record.decision.allowed is False
+    assert "kernel.internal" in record.decision.reason
+
+
+def test_check_records_an_audit_entry_on_malformed_permission() -> None:
+    audit_sink = _RecordingAuditSink()
+    engine = AuthorizationEngine(PermissionResolver(_make_registry()), audit_sink=audit_sink)
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
+
+    engine.check(request, _make_context(), granted_permissions=frozenset({"NOT VALID"}))
+
+    assert len(audit_sink.recorded) == 1
+    assert audit_sink.recorded[0].event == "authorization.denied"
+    assert audit_sink.recorded[0].decision.allowed is False
+
+
+def test_check_without_an_audit_sink_records_nothing() -> None:
+    """No audit sink configured: identical to this engine's pre-Sprint-17
+    behavior -- no recording, no error.
+    """
+    engine = _make_engine()
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
+
+    result = engine.check(request, _make_context(), granted_permissions=frozenset())
+
+    assert result.granted is True  # no audit sink wired in, nothing to assert on it
+
+
+def test_check_publishes_events_and_records_audit_identically() -> None:
+    """Proves both mechanisms observe the same grant/deny decision for the
+    same request, wired side by side with no interaction between them.
+    """
+    event_bus = _RecordingEventBus()
+    audit_sink = _RecordingAuditSink()
+    engine = AuthorizationEngine(
+        PermissionResolver(_make_registry()), event_bus=event_bus, audit_sink=audit_sink
+    )
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="health_check")
+
+    engine.check(request, _make_context(), granted_permissions=frozenset({"kernel.internal"}))
+
+    assert len(event_bus.published) == len(audit_sink.recorded) == 1
+    assert isinstance(event_bus.published[0], AuthorizationGranted)
+    assert audit_sink.recorded[0].event == "authorization.granted"
+    assert event_bus.published[0].request_id == audit_sink.recorded[0].subject == request.request_id

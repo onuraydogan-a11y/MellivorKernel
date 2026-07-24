@@ -10,9 +10,13 @@ subsystem's entry below and its own spec in `docs/specs/` for what
 skeleton; `agents` is a first, deliberately minimal slice; `security` and
 `observability` are contracts-and-primitives-only foundations with no
 concrete secret backend, authentication model, metrics/tracing vendor, or
-telemetry export yet, and neither is consumed by any other subsystem yet.
-See `docs/release/v1.0-release-checklist.md` for the full
-release-readiness assessment.
+telemetry export yet. As of Sprint 17, both foundations have their first
+production consumers — `authorization` records grant/deny decisions
+through `security.AuditSink`, and `execution` emits lifecycle
+observations through `observability.StructuredEventSink` — but no other
+subsystem consumes either yet. See
+`docs/release/v1.0-release-checklist.md` for the full release-readiness
+assessment.
 
 This document reflects the scope decision recorded in
 [ADR-0002](adr/0002-ai-enterprise-kernel-scope-and-subsystems.md). Read that
@@ -173,12 +177,15 @@ dependency-injected package providing secret handling (`Secret`,
 (`SecurityPolicy`, `SecurityDecision`), a secure-configuration contract
 (`SecureConfiguration`), and audit contracts (`AuditRecord`, `AuditSink`).
 It depends only on `core` (for the shared `KernelError` base) and is not
-imported by `authorization`, `execution`, `workflow`, `agents`, or
-`providers` — see [`docs/specs/security.md`](specs/security.md) and
-[ADR-0012](adr/0012-security-foundation.md). This package is
+imported by `execution`, `workflow`, `agents`, or `providers` — see
+[`docs/specs/security.md`](specs/security.md) and
+[ADR-0012](adr/0012-security-foundation.md). This package remains
 foundation-only: it implements no authentication, OAuth, SSO, RBAC,
-encryption, or concrete secret backend, and no subsystem consumes it yet.
-Those remain unplaced.
+encryption, or concrete secret backend. As of Sprint 17, `authorization`
+is its first consumer, recording every grant/deny decision as an
+`AuditRecord` through an injected `AuditSink` — see the authorization
+layer section below. Everything beyond that (a concrete audit sink
+implementation, authentication, encryption) remains unplaced.
 
 ### Observability: structured logging (Sprint 2) plus an `observability` foundation (Sprint 16)
 
@@ -196,10 +203,14 @@ default implementations, and an `Observability` composition wrapper. Unlike
 every other subsystem in this document, it has no dependency on any other
 kernel package, including `core` — see
 [`docs/specs/observability.md`](specs/observability.md) and
-[ADR-0013](adr/0013-observability-foundation.md). This package is
+[ADR-0013](adr/0013-observability-foundation.md). This package remains
 foundation-only: it ships no metrics backend, tracing vendor integration,
-telemetry exporter, or audit/trace consumer built on `events`, and no
-subsystem consumes it yet. Those remain unaddressed.
+or telemetry exporter. As of Sprint 17, `execution` is its first
+consumer, emitting a `StructuredObservationEvent` at each lifecycle point
+through an injected `StructuredEventSink` — see the execution layer
+section below. Everything beyond that (a concrete metrics/tracing
+backend, vendor integration, or an audit/trace consumer built on
+`events`) remains unaddressed.
 
 ## The composition layer (`src/mellivor_kernel/bootstrap/`)
 
@@ -247,7 +258,15 @@ only on the abstract bus, never a concrete implementation. As of Sprint
 `memory.MemoryStore` — see
 [ADR-0009](adr/0009-memory-subsystem-and-execution-recording.md) — the
 only new dependency this adds is on `memory` itself, never on any
-provider it might one day inform.
+provider it might one day inform. As of Sprint 17, `execution` also
+optionally emits a `StructuredObservationEvent` to an injected
+`observability.StructuredEventSink` at the same three lifecycle points
+`EventBus` already publishes to, correlated by `request.request_id` — the
+two mechanisms are independent, and configuring one never affects the
+other. This is the first subsystem to consume `observability` since its
+Sprint 16 foundation shipped — see
+[ADR-0013](adr/0013-observability-foundation.md) and
+[`docs/specs/execution.md`](specs/execution.md).
 
 ## The authorization layer (`src/mellivor_kernel/authorization/`)
 
@@ -268,6 +287,14 @@ As of Sprint 9, `authorization` also publishes `AuthorizationGranted`/
 uses — a normal dependency on generic infrastructure, not the kind of
 coupling ADR-0007 inverted away from, since `events` carries no decision
 logic. See [ADR-0008](adr/0008-event-bus-and-lifecycle-events.md).
+
+As of Sprint 17, `authorization` also optionally records every grant/deny
+decision as a `security.AuditRecord` to an injected `security.AuditSink`,
+alongside (never instead of) the `EventBus` publication above — the two
+mechanisms are independent, and configuring one never affects the other.
+This is the first subsystem to consume `security` since its Sprint 15
+foundation shipped — see [ADR-0012](adr/0012-security-foundation.md) and
+[`docs/specs/authorization.md`](specs/authorization.md).
 
 As of Sprint 12, `workflow` sits above all of the above, composing
 sequential `execution.ExecutionEngine.execute()` calls — it never

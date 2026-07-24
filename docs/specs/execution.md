@@ -1,7 +1,8 @@
 # `execution` subsystem spec
 
 Status: Implemented (Sprint 6; authorization wired in Sprint 8; events in
-Sprint 9; memory recording in Sprint 11).
+Sprint 9; memory recording in Sprint 11; observability emission in
+Sprint 17).
 
 Public contract exported from `mellivor_kernel.execution`. Anything not
 listed here is internal and carries no compatibility guarantee, per
@@ -11,9 +12,11 @@ subsystem exists,
 [ADR-0007](../adr/0007-authorization-engine-and-execution-decoupling.md)
 for how it consults authorization without depending on it,
 [ADR-0008](../adr/0008-event-bus-and-lifecycle-events.md) for its
-published events, and
+published events,
 [ADR-0009](../adr/0009-memory-subsystem-and-execution-recording.md) for
-how it records to memory.
+how it records to memory, and
+[ADR-0013](../adr/0013-observability-foundation.md) for the observability
+foundation it optionally emits structured observations to.
 
 ## Exceptions
 
@@ -195,6 +198,7 @@ def __init__(
     authorizer: Authorizer | None = None,
     event_bus: EventBus | None = None,
     memory: MemoryStore | None = None,
+    observability: StructuredEventSink | None = None,
 ) -> None
 
 def execute(
@@ -208,10 +212,13 @@ def execute(
 
 Flow: `ExecutionRequest -> Authorization -> Dispatcher -> Tool/Provider ->
 ExecutionResult`, with `ExecutionStarted`/`ExecutionCompleted`/
-`ExecutionFailed` published around it when `event_bus` is configured, and
-each outcome recorded to `memory` when configured.
+`ExecutionFailed` published around it when `event_bus` is configured,
+matching `StructuredObservationEvent`s emitted when `observability` is
+configured, and each outcome recorded to `memory` when configured.
 
-- Logs the start of execution and publishes `ExecutionStarted`.
+- Logs the start of execution and publishes `ExecutionStarted`, then emits
+  a `"execution.started"` `StructuredObservationEvent` if `observability`
+  is configured.
 - If `authorizer` is configured, calls
   `authorizer.check(request, context, granted_permissions=granted_permissions)`.
   A denial (`outcome.granted is False`) publishes `ExecutionFailed`
@@ -224,7 +231,13 @@ each outcome recorded to `memory` when configured.
   configured, an empty set is always forwarded, identical to this
   engine's behavior before Sprint 8.
 - Logs the outcome (`INFO` on success, `WARNING` on failure), publishes
-  `ExecutionCompleted` or `ExecutionFailed` accordingly.
+  `ExecutionCompleted` or `ExecutionFailed` accordingly, then emits the
+  matching `"execution.completed"`/`"execution.failed"` structured
+  observation if `observability` is configured — always the same
+  lifecycle point as the `EventBus` publication, correlated by
+  `request.request_id` as the observation's `ObservationContext
+  .correlation_id`. The two mechanisms are independent: configuring one
+  never affects the other.
 - If `memory` is configured, records the outcome as a `MemoryEntry` keyed
   by `request.request_id` (see `docs/specs/memory.md`) — for both success
   and failure, including an authorization denial. A memory backend
@@ -234,7 +247,9 @@ each outcome recorded to `memory` when configured.
 With `event_bus=None` (the default), no events are ever published —
 identical to this engine's behavior before Sprint 9. With `memory=None`
 (the default), nothing is ever recorded — identical to this engine's
-behavior before Sprint 11.
+behavior before Sprint 11. With `observability=None` (the default),
+nothing is ever emitted — identical to this engine's behavior before
+Sprint 17.
 
 Performs no validation of its own beyond what `ExecutionRequest` already
 enforces at construction, and no retries or workflow composition — see
@@ -246,8 +261,12 @@ ADR-0006/ADR-0007 for why each is explicitly out of scope.
 depends on), `tools` (`ToolRegistry`, `ToolExecutionPipeline`, `ToolContext`,
 `ToolRegistrationError`, `ToolValidationError`, `Permission`), `providers`
 (`ProviderRegistry`, `ProviderRegistrationError`) — all three only inside
-`dispatch.py` — `events` (`Event`, `EventBus`), and `memory`
-(`MemoryEntry`, `MemoryStore`). `core`, `tools`, `providers`, `events`, and
-`memory` have no dependency on `execution`. `authorization` depends on
-`execution` (not the other way around) — see
+`dispatch.py` — `events` (`Event`, `EventBus`), `memory`
+(`MemoryEntry`, `MemoryStore`), and, as of Sprint 17, `observability`
+(`ObservationContext`, `StructuredEventSink`, `StructuredObservationEvent`)
+— consumed only through the abstract `StructuredEventSink` Protocol,
+never a concrete sink; `observability` itself depends on nothing, so this
+adds no new transitive dependency. `core`, `tools`, `providers`, `events`,
+`memory`, and `observability` have no dependency on `execution`.
+`authorization` depends on `execution` (not the other way around) — see
 `docs/specs/authorization.md`.

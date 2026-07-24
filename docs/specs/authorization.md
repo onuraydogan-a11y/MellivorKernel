@@ -1,6 +1,7 @@
 # `authorization` subsystem spec
 
-Status: Implemented (Sprint 8; events in Sprint 9).
+Status: Implemented (Sprint 8; events in Sprint 9; audit recording in
+Sprint 17).
 
 Public contract exported from `mellivor_kernel.authorization`. Anything not
 listed here is internal and carries no compatibility guarantee, per
@@ -8,9 +9,11 @@ listed here is internal and carries no compatibility guarantee, per
 [ADR-0007](../adr/0007-authorization-engine-and-execution-decoupling.md)
 for why this subsystem exists, why it depends on `execution` rather than
 the other way around, and what it deliberately excludes (execution,
-dispatch, business policy); see
+dispatch, business policy);
 [ADR-0008](../adr/0008-event-bus-and-lifecycle-events.md) for its
-published events.
+published events; and
+[ADR-0012](../adr/0012-security-foundation.md) for the security foundation
+it optionally records grant/deny decisions to.
 
 ## Exceptions
 
@@ -99,7 +102,11 @@ sequence for the same request. See ADR-0008 and `docs/specs/events.md`.
 
 ```python
 def __init__(
-    self, permission_resolver: PermissionResolver, *, event_bus: EventBus | None = None
+    self,
+    permission_resolver: PermissionResolver,
+    *,
+    event_bus: EventBus | None = None,
+    audit_sink: AuditSink | None = None,
 ) -> None
 
 def authorize(self, request: AuthorizationRequest) -> AuthorizationResult
@@ -118,21 +125,30 @@ def check(
   using the *existing*
   `tools.permissions.missing_permissions(required, granted)` — no new
   diffing logic. Grants if nothing is missing; otherwise denies, naming
-  every missing permission in `reason`. **Never publishes events** — it
-  takes only an `AuthorizationRequest`, which has no execution request id
-  to correlate an event against.
+  every missing permission in `reason`. **Never publishes events or
+  records audit entries** — it takes only an `AuthorizationRequest`, which
+  has no execution request id to correlate either against.
 - `check()` — the adapter `execution.ExecutionEngine` actually calls, and
-  the only method in this subsystem that touches `execution` types or
-  publishes events. Converts each raw permission string in
-  `granted_permissions` into a `tools.permissions.Permission`; an invalid
-  format (a `ToolValidationError`) is translated into a denied
+  the only method in this subsystem that touches `execution` types,
+  publishes events, or records audit entries. Converts each raw permission
+  string in `granted_permissions` into a `tools.permissions.Permission`;
+  an invalid format (a `ToolValidationError`) is translated into a denied
   `AuthorizationResult` (and a published `AuthorizationDenied`) rather
   than raised, consistent with ADR-0004. Builds an `AuthorizationRequest`
   from `request.target`/`request.operation`/the validated claim, delegates
   to `authorize()`, then publishes `AuthorizationGranted` or
-  `AuthorizationDenied` when `event_bus` is configured. With
-  `event_bus=None` (the default), no events are ever published —
-  identical to this engine's behavior before Sprint 9.
+  `AuthorizationDenied` when `event_bus` is configured, and records the
+  same decision as a `security.AuditRecord` when `audit_sink` is
+  configured — for every outcome, including the malformed-permission
+  denial path. `AuditRecord.subject` is `request.request_id` (the same
+  correlation key the events use) and `AuditRecord.action` is
+  `"<target>:<operation>"`, so a recorded entry names both what was
+  evaluated and which request it belongs to without any change to
+  `AuditRecord`'s own shape. With `event_bus=None` or `audit_sink=None`
+  (both default), the corresponding mechanism is skipped — identical to
+  this engine's behavior before Sprint 9 (events) or Sprint 17 (audit).
+  The two mechanisms are independent: configuring one never affects the
+  other.
 
 `check()`'s signature satisfies `execution.contracts.Authorizer`
 structurally — `execution` never imports `AuthorizationEngine` by name; see
@@ -141,14 +157,18 @@ structurally — `execution` never imports `AuthorizationEngine` by name; see
 ## Dependency relationship
 
 ```
-authorization → execution, tools, events, core
+authorization → execution, tools, events, security, core
 ```
 
 `authorization` depends on `execution` (`ExecutionRequest`,
 `ExecutionContext`, `ExecutionTarget`), `tools` (`Permission`,
 `missing_permissions`, `ToolRegistry`, `ToolRegistrationError`,
-`ToolValidationError`), and `events` (`Event`, `EventBus`) — never on
+`ToolValidationError`), `events` (`Event`, `EventBus`), and, as of
+Sprint 17, `security` (`AuditRecord`, `AuditSink`, `SecurityDecision`) —
+consumed only through the abstract `AuditSink` Protocol, never a concrete
+sink; `security` itself depends only on `core`, so this adds no new
+transitive dependency beyond that. `authorization` never depends on
 `providers`. `execution` has **no** dependency on `authorization`; it
 depends only on the `Authorizer`/`AuthorizationOutcome` Protocols it
-defines itself (see `execution.contracts`). `tools` and `events` have no
-dependency on `authorization`.
+defines itself (see `execution.contracts`). `tools`, `events`, and
+`security` have no dependency on `authorization`.
