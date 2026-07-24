@@ -28,5 +28,12 @@ examples never become a dependency of the kernel itself.
   validates and instantiates it, `PluginRegistry` registers it, and
   `PluginLifecycle` drives it through initialize/start/stop/dispose,
   printing the read-only kernel information it reports.
+- [`plugin_discovery.py`](plugin_discovery.py) — Plugin Discovery
+  (Sprint 21): discovers the `system-info` sample plugin from
+  [`sample_plugins/`](sample_plugins/) -- a real filesystem location
+  containing a manifest file, not a hand-constructed `PluginManifest` --
+  loads and registers it through the unmodified `PluginLoader`/
+  `PluginRegistry`, and drives it through the same lifecycle
+  `plugin_system_info.py` demonstrates by hand.
 
 Run any of them with `python examples/<name>.py` from the repository root.

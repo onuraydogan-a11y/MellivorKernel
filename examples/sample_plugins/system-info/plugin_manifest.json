@@ -1,0 +1,15 @@
+{
+  "id": "system-info",
+  "name": "System Information Plugin",
+  "version": "1.0.0",
+  "description": "Exposes read-only kernel information: version, build info, available capabilities, registered providers/tools, and runtime health.",
+  "author": "Mellivor Kernel",
+  "minimum_kernel_version": "0.13.0",
+  "capabilities": [
+    {
+      "name": "kernel.introspection",
+      "description": "Read-only kernel and runtime information."
+    }
+  ],
+  "entry_point": "mellivor_kernel.plugins_builtin.system_info:SystemInfoPlugin"
+}

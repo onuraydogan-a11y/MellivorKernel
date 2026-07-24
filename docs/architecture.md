@@ -4,24 +4,30 @@ Status: Release Candidate (v0.13.0). `core`, `config`, `tools`,
 `providers` (interfaces plus the `ClaudeProvider` reference
 implementation), `bootstrap`, `execution`, `authorization`, `events`,
 `memory`, `workflow`, a first slice of `agents`, and foundation-only
-`security`, `observability`, `plugins`, `plugin_sdk`, and
-`plugins_builtin` packages are implemented — see each subsystem's entry
-below and its own spec in `docs/specs/` for what "implemented" covers and
-excludes. `agents` is a first, deliberately minimal slice; `security` and
-`observability` are contracts-and-primitives-only foundations with no
-concrete secret backend, authentication model, metrics/tracing vendor,
-or telemetry export yet; `plugins` is a runtime-primitives-only
-foundation with no filesystem or entry-point discovery yet;
-`plugin_sdk` is a developer-convenience layer over `plugins` adding no
-new contract or validation rule of its own; `plugins_builtin` contains
-exactly one built-in plugin (`SystemInfoPlugin`, Sprint 20), exercising
-both foundations end to end. As of Sprint 17, the security/observability
-foundations have their first production consumers — `authorization`
-records grant/deny decisions through `security.AuditSink`, and
-`execution` emits lifecycle observations through
-`observability.StructuredEventSink` — but no other subsystem consumes
-either. As of Sprint 20, `plugin_sdk`'s first consumer is
-`plugins_builtin`; nothing consumes `plugins_builtin` itself. See
+`security`, `observability`, `plugins`, `plugin_sdk`, `plugins_builtin`,
+and `plugin_discovery` packages are implemented — see each subsystem's
+entry below and its own spec in `docs/specs/` for what "implemented"
+covers and excludes. `agents` is a first, deliberately minimal slice;
+`security` and `observability` are contracts-and-primitives-only
+foundations with no concrete secret backend, authentication model,
+metrics/tracing vendor, or telemetry export yet; `plugin_sdk` is a
+developer-convenience layer over `plugins` adding no new contract or
+validation rule of its own; `plugins_builtin` contains exactly one
+built-in plugin (`SystemInfoPlugin`, Sprint 20), exercising both
+foundations end to end; `plugin_discovery` (Sprint 21) discovers plugins
+from a filesystem location and loads/registers them through the
+unmodified `PluginLoader`/`PluginRegistry`, introducing no new marketplace,
+remote-plugin, sandboxing, hot-reload, signature-verification, or
+package-installation capability. As of Sprint 17, the
+security/observability foundations have their first production
+consumers — `authorization` records grant/deny decisions through
+`security.AuditSink`, and `execution` emits lifecycle observations
+through `observability.StructuredEventSink` — but no other subsystem
+consumes either. As of Sprint 20, `plugin_sdk`'s first consumer is
+`plugins_builtin`. As of Sprint 21, `plugin_discovery` is the first
+consumer to load a plugin (`plugins_builtin.SystemInfoPlugin`) without a
+caller hand-constructing its manifest; nothing consumes
+`plugin_discovery` or `plugins_builtin` themselves. See
 `docs/release/v1.0-release-checklist.md` for the full release-readiness
 assessment.
 
@@ -143,13 +149,15 @@ Per ADR-0002, the kernel's responsibilities are limited to exactly:
   (`Plugin`, `PluginMetadata`, `PluginContext`, `PluginCapability`), an
   immutable `PluginManifest`, `PluginRegistry`, `PluginLoader`, and
   `PluginLifecycle` state management — was implemented in Sprint 18.
-  Foundation-only: no filesystem or entry-point discovery is implemented
-  yet — a caller supplies an explicit `PluginManifest` and constructor. A
-  developer-convenience layer over this runtime, `plugin_sdk`, was added
-  in Sprint 19 — see "The Plugin SDK" section below. The kernel's first
-  (and, at this sprint's scope, only) built-in plugin,
+  A caller may still supply an explicit `PluginManifest` and constructor
+  directly. A developer-convenience layer over this runtime, `plugin_sdk`,
+  was added in Sprint 19 — see "The Plugin SDK" section below. The
+  kernel's first (and, at this sprint's scope, only) built-in plugin,
   `plugins_builtin.SystemInfoPlugin`, was added in Sprint 20 — see
-  "Built-in plugins" below. See
+  "Built-in plugins" below. Filesystem discovery, `plugin_discovery`, was
+  added in Sprint 21 — see "Plugin Discovery" below. No marketplace,
+  remote plugins, sandboxing, hot reload, signature verification, or
+  package installation is implemented. See
   [`docs/specs/plugins.md`](specs/plugins.md) and
   [ADR-0014](adr/0014-plugin-runtime-foundation.md).
 
@@ -349,8 +357,10 @@ same `Plugin` contract, and the `is_valid_*` helpers catch
 never on `execution`, `providers`, `workflow`, `authorization`, `memory`,
 `observability`, `security`, or `bootstrap`. As of Sprint 20, its one
 known dependent is `plugins_builtin` (below); no other subsystem imports
-it. Plugin discovery, a marketplace, sandboxing, and filesystem loading
-remain out of scope, unchanged from ADR-0014.
+it. `plugin_sdk` itself adds no discovery, marketplace, or sandboxing
+capability — filesystem discovery was placed in a separate package,
+`plugin_discovery`, in Sprint 21 (below), unchanged from ADR-0014's
+original scope decision.
 
 ## Built-in plugins (`src/mellivor_kernel/plugins_builtin/`)
 
@@ -373,6 +383,37 @@ ceiling of its own: it depends on `plugin_sdk`, `plugins`, `providers`
 (to report registered providers), `tools` (to report registered tools),
 `core`, and the top-level `version` module — the same latitude
 `tools.builtin.HealthCheckTool` already has for `Kernel.health()`.
+Nothing depends on `plugins_builtin`. `bootstrap` does not compose it,
+consistent with every engine and plugin-runtime package shipped since
+Sprint 6.
+
+## Plugin Discovery (`src/mellivor_kernel/plugin_discovery/`)
+
+`plugin_discovery` is a top-level package, implemented in Sprint 21,
+providing exactly one class, `PluginDiscovery`, that discovers plugins
+from a filesystem location and loads/registers them through the
+*existing*, unmodified `plugins.PluginLoader`/`PluginRegistry` —
+introducing no new loading, validation, or registration logic of its
+own. `root` contains one subdirectory per plugin, each holding a
+manifest file (a JSON object with `PluginManifest`'s own fields plus a
+discovery-only `entry_point` string naming the zero-argument callable
+that constructs the `Plugin`). `scan()`, `read_manifest()`, `load()`,
+and `discover_and_register()` are each a single step, composable
+independently; `discover_and_register()` fails fast, aborting on the
+first error without rolling back plugins already registered. See
+[`docs/specs/plugin_discovery.md`](specs/plugin_discovery.md),
+[`examples/plugin_discovery.py`](../examples/plugin_discovery.py), and
+[ADR-0017](adr/0017-plugin-discovery-foundation.md).
+
+`plugin_discovery` depends only on `plugins` and `core` — never on
+`providers`, `tools`, `execution`, `authorization`, `events`, `memory`,
+`workflow`, `agents`, `security`, `observability`, `bootstrap`,
+`plugin_sdk`, or `plugins_builtin`. Nothing depends on it. `bootstrap`
+does not compose it, consistent with every plugin-runtime package
+shipped since Sprint 18. No marketplace, remote plugins, sandboxing, hot
+reload, signature verification, or package installation is implemented
+— a discovered plugin's code is imported and executed with exactly the
+same trust as any other import in the running process.
 Nothing depends on `plugins_builtin`. `bootstrap` does not compose it,
 consistent with every engine and plugin-runtime package shipped since
 Sprint 6.
