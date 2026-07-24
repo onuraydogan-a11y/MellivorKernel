@@ -26,3 +26,4 @@ Specs are added as each kernel subsystem is designed and implemented:
 - [`plugin_sdk.md`](plugin_sdk.md)
 - [`plugins_builtin.md`](plugins_builtin.md)
 - [`plugin_discovery.md`](plugin_discovery.md)
+- [`ai_engine.md`](ai_engine.md)

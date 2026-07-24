@@ -5,29 +5,38 @@ Status: Release Candidate (v0.13.0). `core`, `config`, `tools`,
 implementation), `bootstrap`, `execution`, `authorization`, `events`,
 `memory`, `workflow`, a first slice of `agents`, and foundation-only
 `security`, `observability`, `plugins`, `plugin_sdk`, `plugins_builtin`,
-and `plugin_discovery` packages are implemented — see each subsystem's
-entry below and its own spec in `docs/specs/` for what "implemented"
-covers and excludes. `agents` is a first, deliberately minimal slice;
-`security` and `observability` are contracts-and-primitives-only
-foundations with no concrete secret backend, authentication model,
-metrics/tracing vendor, or telemetry export yet; `plugin_sdk` is a
-developer-convenience layer over `plugins` adding no new contract or
-validation rule of its own; `plugins_builtin` contains exactly one
-built-in plugin (`SystemInfoPlugin`, Sprint 20), exercising both
-foundations end to end; `plugin_discovery` (Sprint 21) discovers plugins
-from a filesystem location and loads/registers them through the
-unmodified `PluginLoader`/`PluginRegistry`, introducing no new marketplace,
-remote-plugin, sandboxing, hot-reload, signature-verification, or
-package-installation capability. As of Sprint 17, the
-security/observability foundations have their first production
-consumers — `authorization` records grant/deny decisions through
-`security.AuditSink`, and `execution` emits lifecycle observations
-through `observability.StructuredEventSink` — but no other subsystem
-consumes either. As of Sprint 20, `plugin_sdk`'s first consumer is
-`plugins_builtin`. As of Sprint 21, `plugin_discovery` is the first
-consumer to load a plugin (`plugins_builtin.SystemInfoPlugin`) without a
-caller hand-constructing its manifest; nothing consumes
-`plugin_discovery` or `plugins_builtin` themselves. See
+`plugin_discovery`, and `ai_engine` packages are implemented — see each
+subsystem's entry below and its own spec in `docs/specs/` for what
+"implemented" covers and excludes. `agents` is a first, deliberately
+minimal slice; `security` and `observability` are
+contracts-and-primitives-only foundations with no concrete secret
+backend, authentication model, metrics/tracing vendor, or telemetry
+export yet; `plugin_sdk` is a developer-convenience layer over `plugins`
+adding no new contract or validation rule of its own; `plugins_builtin`
+contains exactly one built-in plugin (`SystemInfoPlugin`, Sprint 20),
+exercising both foundations end to end; `plugin_discovery` (Sprint 21)
+discovers plugins from a filesystem location and loads/registers them
+through the unmodified `PluginLoader`/`PluginRegistry`, introducing no
+new marketplace, remote-plugin, sandboxing, hot-reload,
+signature-verification, or package-installation capability; `ai_engine`
+(Sprint 22) is a pure composition layer, `AIEngineBuilder`/`AIEngine`,
+assembling an already-bootstrapped `RuntimeContext` and the
+orchestration-chain engines (`execution`/`workflow`/`agents`, with
+`authorization` optionally consulted) plus a `PluginRegistry`, with no
+new business logic, chat feature, prompting, reasoning, planning,
+orchestration decision, or provider-selection logic of its own. As of
+Sprint 17, the security/observability foundations have their first
+production consumers — `authorization` records grant/deny decisions
+through `security.AuditSink`, and `execution` emits lifecycle
+observations through `observability.StructuredEventSink` — but no other
+subsystem consumes either. As of Sprint 20, `plugin_sdk`'s first
+consumer is `plugins_builtin`. As of Sprint 21, `plugin_discovery` is
+the first consumer to load a plugin (`plugins_builtin.SystemInfoPlugin`)
+without a caller hand-constructing its manifest. As of Sprint 22,
+`ai_engine` is the first consumer to compose `execution`, `workflow`,
+`agents`, and `authorization` together into one object; nothing in the
+kernel itself consumes `ai_engine`, `plugin_discovery`, or
+`plugins_builtin` — only a consuming application is expected to. See
 `docs/release/v1.0-release-checklist.md` for the full release-readiness
 assessment.
 
@@ -418,6 +427,40 @@ Nothing depends on `plugins_builtin`. `bootstrap` does not compose it,
 consistent with every engine and plugin-runtime package shipped since
 Sprint 6.
 
+## AI Engine Foundation (`src/mellivor_kernel/ai_engine/`)
+
+`ai_engine` is a top-level package, implemented in Sprint 22, providing
+exactly one composed façade, `AIEngine`, built only by a fluent builder,
+`AIEngineBuilder`, over an already-bootstrapped `RuntimeContext`. It
+closes the one remaining gap between "the kernel has every capability
+ADR-0002 names" and "a product can adopt the kernel with a single,
+obvious entry point": until this sprint, any consumer wanting to run a
+workflow or an agent had to hand-construct `Dispatcher`,
+`ExecutionEngine`, `WorkflowEngine`, and `AgentEngine` itself, wiring
+each one's optional dependencies correctly every time. `AIEngine`
+introduces no new decision logic — `execute()`/`run_workflow()`/
+`run_agent()` call exactly `ExecutionEngine.execute()`/
+`WorkflowEngine.run()`/`AgentEngine.execute()`, with exactly the
+arguments given, and return exactly what that engine returns. The one
+lifecycle it does own is a composed `PluginRegistry`'s fleet
+(`start_plugins()`/`stop_plugins()`/`dispose_plugins()`), since the
+underlying `Kernel`'s own lifecycle already ran to completion inside
+`BootstrapBuilder.build()` before an `AIEngine` exists. See
+[`docs/specs/ai_engine.md`](specs/ai_engine.md) and
+[ADR-0018](adr/0018-ai-engine-foundation.md).
+
+`ai_engine` depends on `core`, `bootstrap`, `execution`, `authorization`,
+`workflow`, `agents`, `memory`, `events`, `security`, `observability`,
+`plugins`, and `plugin_discovery` — never on `config`, `providers`,
+`tools`, `plugin_sdk`, or `plugins_builtin` directly. Nothing in the
+kernel imports `ai_engine`; it sits at the top of the composition stack,
+with no dependents inside this repository — only a consuming
+application (e.g. Mellivor One) is expected to depend on it. `bootstrap`
+remains solely responsible for infrastructure assembly
+(`config`/`core`/`providers`/`tools` → `RuntimeContext`); `ai_engine`
+never constructs a `Kernel`, `ProviderRegistry`, or `ToolRegistry` — it
+only composes on top of an already-built `RuntimeContext`.
+
 ## Consumption model
 
 Products — Mellivor One, and future enterprise products — depend on the
@@ -425,7 +468,11 @@ kernel as a library: they compose kernel subsystems and supply providers for
 the model(s) they need. Business logic, UI, and domain modules live entirely
 in the consuming product, never in this repository. As of Sprint 5, this
 composition has a concrete mechanism — `mellivor_kernel.bootstrap` — rather
-than being something each consuming product had to hand-roll itself.
+than being something each consuming product had to hand-roll itself. As of
+Sprint 22, a product wanting the full orchestration chain on top of that
+runtime has a second concrete mechanism — `mellivor_kernel.ai_engine` —
+rather than hand-wiring `ExecutionEngine`/`WorkflowEngine`/`AgentEngine`
+itself.
 
 ## How this document evolves
 

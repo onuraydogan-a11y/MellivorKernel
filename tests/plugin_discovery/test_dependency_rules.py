@@ -51,15 +51,16 @@ def test_plugin_discovery_source_only_imports_plugins_and_core() -> None:
     assert offending == []
 
 
-def test_no_kernel_package_imports_plugin_discovery() -> None:
-    """`plugin_discovery` is a new leaf with no dependents -- nothing in
-    the kernel itself should import it.
+def test_no_kernel_package_other_than_ai_engine_imports_plugin_discovery() -> None:
+    """`plugin_discovery` has exactly one sanctioned dependent inside the
+    kernel: `ai_engine` (Sprint 22, ADR-0018), the top of the composition
+    stack. No other kernel package should import it.
     """
     src_root = Path(__file__).resolve().parents[2] / "src" / "mellivor_kernel"
 
     offending: list[str] = []
     for path in src_root.rglob("*.py"):
-        if "plugin_discovery" in path.parts:
+        if "plugin_discovery" in path.parts or "ai_engine" in path.parts:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):

@@ -89,6 +89,7 @@ src/mellivor_kernel/
     plugin_sdk/      Plugin SDK: builder, base plugin, creation/validation helpers
     plugins_builtin/ Built-in plugins: SystemInfoPlugin
     plugin_discovery/ Plugin Discovery: filesystem manifest scanning, entry-point loading
+    ai_engine/       AI Engine Foundation: composes bootstrap + execution/workflow/agents/plugins
 docs/architecture.md  High-level architecture
 docs/architecture/    Principles and roadmap
 docs/adr/            Architecture Decision Records
@@ -143,7 +144,10 @@ where Sprint 17 wired them into `authorization`/`execution`; `plugin_sdk`
 is a convenience layer over `plugins` whose only consumer is
 `plugins_builtin`, the kernel's first built-in plugin; `plugin_discovery`
 adds filesystem discovery but no marketplace, remote plugins, sandboxing,
-hot reload, signature verification, or package installation). See
+hot reload, signature verification, or package installation; `ai_engine`
+composes the orchestration chain but adds no business logic, chat
+feature, prompting, reasoning, planning, orchestration decision, or
+provider-selection logic of its own). See
 [`docs/release/v1.0-release-checklist.md`](docs/release/v1.0-release-checklist.md)
 for the complete release-readiness assessment, including known
 limitations.
@@ -231,19 +235,33 @@ filesystem location and loads/registers them through the unmodified
 or registration logic; depends only on `plugins` and `core`; no
 marketplace, remote plugins, sandboxing, hot reload, signature
 verification, or package installation; see
-[ADR-0017](docs/adr/0017-plugin-discovery-foundation.md)). `security` and
+[ADR-0017](docs/adr/0017-plugin-discovery-foundation.md)), and
+`ai_engine` (`AIEngine`, `AIEngineBuilder`, `AIEngineContext` — a pure
+composition layer assembling an already-bootstrapped `RuntimeContext`
+and the orchestration-chain engines (`ExecutionEngine` -> `WorkflowEngine`
+-> `AgentEngine`, with an `Authorizer` optionally consulted) plus a
+`PluginRegistry`; every operation delegates to the existing engine that
+already decides it; depends on `core`, `bootstrap`, `execution`,
+`authorization`, `workflow`, `agents`, `memory`, `events`, `security`,
+`observability`, `plugins`, and `plugin_discovery`; see
+[ADR-0018](docs/adr/0018-ai-engine-foundation.md)). `security` and
 `observability` are dependency-injected and structurally separate from
 `execution`, `workflow`, `agents`, and `providers`; as of Sprint 17,
 `authorization` and `execution` are their first consumers (see below). As
 of Sprint 20, `plugin_sdk`'s only consumer is `plugins_builtin`. As of
 Sprint 21, `plugin_discovery` loads `plugins_builtin.SystemInfoPlugin`
-from a real manifest file without a caller hand-constructing it; nothing
-imports `plugin_discovery` or `plugins_builtin` themselves.
+from a real manifest file without a caller hand-constructing it. As of
+Sprint 22, `ai_engine` is the first consumer to compose `execution`,
+`workflow`, `agents`, and `authorization` together into one object;
+nothing in the kernel itself imports `ai_engine`, `plugin_discovery`, or
+`plugins_builtin`.
 
-Bootstrap does not yet wire the newer engines (`ExecutionEngine`,
-`AuthorizationEngine`, `WorkflowEngine`, `AgentEngine`) together
-automatically — a consumer composes them explicitly, as every example in
-[`examples/`](examples/) does.
+`bootstrap` still does not wire the newer engines (`ExecutionEngine`,
+`AuthorizationEngine`, `WorkflowEngine`, `AgentEngine`) together itself —
+that composition now has a concrete, supported mechanism,
+`ai_engine.AIEngineBuilder`, built on top of a `RuntimeContext` rather
+than each consumer hand-wiring the chain, as every example prior to
+Sprint 22 in [`examples/`](examples/) did.
 
 ## Contributing
 

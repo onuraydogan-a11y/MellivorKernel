@@ -35,5 +35,13 @@ examples never become a dependency of the kernel itself.
   loads and registers it through the unmodified `PluginLoader`/
   `PluginRegistry`, and drives it through the same lifecycle
   `plugin_system_info.py` demonstrates by hand.
+- [`ai_engine_foundation.py`](ai_engine_foundation.py) — the AI Engine
+  Foundation (Sprint 22): assembles a bootstrapped `RuntimeContext` into
+  the full orchestration chain (`ExecutionEngine` -> `WorkflowEngine` ->
+  `AgentEngine`, with an `AuthorizationEngine` consulted and an
+  `InMemoryEventBus`/`InMemoryStore` attached) through `AIEngineBuilder`
+  alone -- no engine constructed by hand, unlike every example above --
+  then discovers and runs the `system-info` sample plugin through
+  `with_plugin_discovery()`.
 
 Run any of them with `python examples/<name>.py` from the repository root.

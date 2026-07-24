@@ -47,3 +47,4 @@ Small, local, easily reversible choices do not need an ADR.
 | [0015](0015-plugin-sdk-foundation.md) | Plugin SDK Foundation | Accepted |
 | [0016](0016-system-info-built-in-plugin.md) | System Information built-in plugin | Accepted |
 | [0017](0017-plugin-discovery-foundation.md) | Plugin Discovery Foundation | Accepted |
+| [0018](0018-ai-engine-foundation.md) | AI Engine Foundation | Accepted |
