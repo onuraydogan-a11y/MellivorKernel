@@ -236,7 +236,7 @@ or registration logic; depends only on `plugins` and `core`; no
 marketplace, remote plugins, sandboxing, hot reload, signature
 verification, or package installation; see
 [ADR-0017](docs/adr/0017-plugin-discovery-foundation.md)), and
-`ai_engine` (`AIEngine`, `AIEngineBuilder`, `AIEngineContext` — a pure
+`ai_engine` (`AIEngine`, `AIEngineBuilder` — a pure
 composition layer assembling an already-bootstrapped `RuntimeContext`
 and the orchestration-chain engines (`ExecutionEngine` -> `WorkflowEngine`
 -> `AgentEngine`, with an `Authorizer` optionally consulted) plus a
