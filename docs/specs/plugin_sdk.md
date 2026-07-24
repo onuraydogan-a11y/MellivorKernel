@@ -63,9 +63,9 @@ class BasePlugin(Plugin):
     def metadata(self) -> PluginMetadata: ...
 
     def initialize(self, context: PluginContext) -> None: ...  # no-op
-    def start(self) -> None: ...                                # no-op
-    def stop(self) -> None: ...                                  # no-op
-    def dispose(self) -> None: ...                               # no-op
+    def start(self) -> None: ...  # no-op
+    def stop(self) -> None: ...  # no-op
+    def dispose(self) -> None: ...  # no-op
 ```
 
 `metadata` remains abstract — every plugin must declare its own identity,

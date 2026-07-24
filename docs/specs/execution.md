@@ -156,10 +156,14 @@ class AuthorizationOutcome(Protocol):
     granted: bool
     reason: str | None
 
+
 class Authorizer(Protocol):
     def check(
-        self, request: ExecutionRequest, context: ExecutionContext,
-        *, granted_permissions: frozenset[str],
+        self,
+        request: ExecutionRequest,
+        context: ExecutionContext,
+        *,
+        granted_permissions: frozenset[str],
     ) -> AuthorizationOutcome: ...
 ```
 

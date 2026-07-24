@@ -187,10 +187,13 @@ open design question per `BaseProvider`'s "deliberate scope limitation"
 above):
 
 ```python
-request  = {"prompt": str, "system": str | None, "max_tokens": int | None}
+request = {"prompt": str, "system": str | None, "max_tokens": int | None}
 response = {
-    "text": str, "model": str, "stop_reason": str | None,
-    "input_tokens": int, "output_tokens": int,
+    "text": str,
+    "model": str,
+    "stop_reason": str | None,
+    "input_tokens": int,
+    "output_tokens": int,
 }
 ```
 
@@ -230,9 +233,15 @@ composition:
 factory = ProviderFactory()
 factory.register_provider_type("claude", ClaudeProvider)
 registry = ProviderRegistry()
-registry.register(factory.create(ProviderConfiguration(
-    provider_name="claude", api_key=api_key, default_model="claude-sonnet-5",
-)))
+registry.register(
+    factory.create(
+        ProviderConfiguration(
+            provider_name="claude",
+            api_key=api_key,
+            default_model="claude-sonnet-5",
+        )
+    )
+)
 ```
 
 or directly: `registry.register(ClaudeProvider(configuration))`. See

@@ -81,10 +81,10 @@ An immutable (`frozen=True, slots=True`) dataclass carrying exactly four
 fields, deliberately no more:
 
 ```python
-configuration: KernelSettings   # core.contracts.KernelSettings, not config.KernelConfig
+configuration: KernelSettings  # core.contracts.KernelSettings, not config.KernelConfig
 logger: logging.Logger
-runtime: Kernel                  # core.runtime.Kernel
-services: ServiceContainer       # core.container.ServiceContainer
+runtime: Kernel  # core.runtime.Kernel
+services: ServiceContainer  # core.container.ServiceContainer
 ```
 
 Carries **no business data** — a tool's business-specific input arrives

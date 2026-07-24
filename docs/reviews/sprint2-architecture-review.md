@@ -113,10 +113,19 @@ top-level package.
 
 ```python
 __all__ = [
-    "ConfigurationError", "HealthStatus", "Kernel", "KernelError",
-    "KernelSettings", "KernelState", "ServiceContainer",
-    "ServiceRegistrationError", "StartupError", "StructuredFormatter",
-    "add_file_handler", "configure_logging", "get_logger",
+    "ConfigurationError",
+    "HealthStatus",
+    "Kernel",
+    "KernelError",
+    "KernelSettings",
+    "KernelState",
+    "ServiceContainer",
+    "ServiceRegistrationError",
+    "StartupError",
+    "StructuredFormatter",
+    "add_file_handler",
+    "configure_logging",
+    "get_logger",
 ]
 ```
 
