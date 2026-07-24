@@ -87,6 +87,7 @@ src/mellivor_kernel/
     security/        Security foundation: secrets, policy, secure config, audit contracts
     observability/   Observability foundation: metrics/tracing/event contracts, no-ops
     plugin_sdk/      Plugin SDK: builder, base plugin, creation/validation helpers
+    plugins_builtin/ Built-in plugins: SystemInfoPlugin
 docs/architecture.md  High-level architecture
 docs/architecture/    Principles and roadmap
 docs/adr/            Architecture Decision Records
@@ -136,11 +137,12 @@ ADR-0002 is stable, which is not yet the case (`agents` is a first,
 deliberately minimal slice; `security`, `observability`, and `plugins`
 are foundation-only — contracts and primitives with no concrete secret
 backend, authentication, encryption, metrics/tracing vendor, telemetry
-export, built-in plugin, or filesystem/entry-point discovery, and none
-of the three is consumed by any other subsystem except where Sprint 17
-wired `security`/`observability` into `authorization`/`execution`;
-`plugin_sdk` is a convenience layer over `plugins` with no consumer of
-its own). See
+export, or filesystem/entry-point discovery, and none of the three is
+consumed by any other subsystem except where Sprint 17 wired
+`security`/`observability` into `authorization`/`execution`; `plugin_sdk`
+is a convenience layer over `plugins` whose only consumer is
+`plugins_builtin`, the kernel's first — and, at this sprint's scope,
+only — built-in plugin). See
 [`docs/release/v1.0-release-checklist.md`](docs/release/v1.0-release-checklist.md)
 for the complete release-readiness assessment, including known
 limitations.
@@ -208,21 +210,25 @@ other kernel package; no metrics/tracing backend or telemetry export; see
 `PluginManifest`, `PluginRegistry`, `PluginLoader`, `PluginLifecycle`/
 `PluginLifecycleState` — the runtime a plugin is loaded, validated,
 registered, and run through, depending only on `core` and the top-level
-`version` module; no built-in plugin ships, and no filesystem or
-entry-point discovery exists yet — a caller supplies an explicit
-`PluginManifest` and constructor; see
-[ADR-0014](docs/adr/0014-plugin-runtime-foundation.md)), and
-`plugin_sdk` (`PluginBuilder`, `BasePlugin`, `create_capability`/
-`create_manifest`/`create_metadata`, `is_valid_capability`/
-`is_valid_manifest`/`is_valid_metadata` — a developer-convenience layer
-over `plugins`, depending only on it; adds no new contract or validation
-rule of its own — every helper delegates to the corresponding `plugins`
-constructor; see [ADR-0015](docs/adr/0015-plugin-sdk-foundation.md)).
-`security` and `observability` are dependency-injected and structurally
-separate from `execution`, `workflow`, `agents`, and `providers`; as of
-Sprint 17, `authorization` and `execution` are their first consumers (see
-below). Neither `plugins` nor `plugin_sdk` has a consumer yet — no other
-subsystem imports either, and `plugin_sdk` imports only `plugins`.
+`version` module; no filesystem or entry-point discovery exists yet — a
+caller supplies an explicit `PluginManifest` and constructor; see
+[ADR-0014](docs/adr/0014-plugin-runtime-foundation.md)), `plugin_sdk`
+(`PluginBuilder`, `BasePlugin`, `create_capability`/`create_manifest`/
+`create_metadata`, `is_valid_capability`/`is_valid_manifest`/
+`is_valid_metadata` — a developer-convenience layer over `plugins`,
+depending only on it; adds no new contract or validation rule of its
+own — every helper delegates to the corresponding `plugins` constructor;
+see [ADR-0015](docs/adr/0015-plugin-sdk-foundation.md)), and
+`plugins_builtin` (`SystemInfoPlugin`, `SystemInfoSnapshot` — the
+kernel's first built-in plugin, exposing read-only kernel version, build
+info, available capabilities, registered providers/tools, and runtime
+health; performs no mutation and no configuration change; see
+[ADR-0016](docs/adr/0016-system-info-built-in-plugin.md)). `security` and
+`observability` are dependency-injected and structurally separate from
+`execution`, `workflow`, `agents`, and `providers`; as of Sprint 17,
+`authorization` and `execution` are their first consumers (see below). As
+of Sprint 20, `plugin_sdk`'s only consumer is `plugins_builtin`; nothing
+imports `plugins_builtin` itself.
 
 Bootstrap does not yet wire the newer engines (`ExecutionEngine`,
 `AuthorizationEngine`, `WorkflowEngine`, `AgentEngine`) together

@@ -22,5 +22,11 @@ examples never become a dependency of the kernel itself.
   `ExecutionEngine` and `AuthorizationEngine`: a single handler subscribes
   to every event type and prints the full lifecycle sequence, correlated
   by `request_id`, for both outcomes.
+- [`plugin_system_info.py`](plugin_system_info.py) — the `SystemInfoPlugin`
+  built-in plugin (Sprint 20) driven through the complete Plugin SDK +
+  Plugin Runtime path: `PluginBuilder` builds a manifest, `PluginLoader`
+  validates and instantiates it, `PluginRegistry` registers it, and
+  `PluginLifecycle` drives it through initialize/start/stop/dispose,
+  printing the read-only kernel information it reports.
 
 Run any of them with `python examples/<name>.py` from the repository root.

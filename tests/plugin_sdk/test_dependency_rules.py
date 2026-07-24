@@ -49,15 +49,19 @@ def test_plugin_sdk_source_only_imports_plugins_and_core() -> None:
     assert offending == []
 
 
-def test_no_kernel_package_imports_plugin_sdk() -> None:
-    """`plugin_sdk` is a convenience layer with no dependents -- nothing
-    in the kernel itself should import it.
+def test_only_the_known_built_in_plugin_package_imports_plugin_sdk() -> None:
+    """As of Sprint 20, `plugin_sdk` has exactly one legitimate
+    dependent: `plugins_builtin` (the built-in `SystemInfoPlugin`
+    dogfoods `BasePlugin`, per ADR-0016). No other kernel package should
+    import it -- an unexpected new dependent here would mean `plugin_sdk`
+    stopped being a leaf convenience layer without a documented decision.
     """
     src_root = Path(__file__).resolve().parents[2] / "src" / "mellivor_kernel"
+    known_dependents = {"plugins_builtin"}
 
     offending: list[str] = []
     for path in src_root.rglob("*.py"):
-        if "plugin_sdk" in path.parts:
+        if "plugin_sdk" in path.parts or path.parts[len(src_root.parts)] in known_dependents:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
@@ -77,3 +81,26 @@ def test_no_kernel_package_imports_plugin_sdk() -> None:
                         offending.append(str(path))
 
     assert offending == []
+
+
+def test_plugins_builtin_is_the_only_actual_dependent_of_plugin_sdk() -> None:
+    """Confirms `plugins_builtin` really does import `plugin_sdk` -- the
+    exemption above is for a real, exercised dependency, not a
+    theoretical carve-out.
+    """
+    src_root = Path(__file__).resolve().parents[2] / "src" / "mellivor_kernel"
+    plugins_builtin_dir = src_root / "plugins_builtin"
+
+    found = False
+    for path in plugins_builtin_dir.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and node.module.startswith("mellivor_kernel.")
+                and node.module.split(".")[1] == "plugin_sdk"
+            ):
+                found = True
+
+    assert found is True
