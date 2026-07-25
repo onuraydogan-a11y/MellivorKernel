@@ -356,6 +356,38 @@ Foundation ([ADR-0018](../adr/0018-ai-engine-foundation.md)) rather than
 a hand-built `Dispatcher`/`ExecutionEngine`, unlike `ClaudeProvider`'s own
 Sprint 10 integration test, which predates `ai_engine`'s existence.
 
+## v1.0 contract ratification (Sprint 25)
+
+[ADR-0019](../adr/0019-release-readiness-and-scope-lock.md) classified
+the provider abstraction `Included in v1.0` pending one closing
+decision: whether each provider's four-way exception granularity has a
+real consumer, and whether `ProviderCapabilities` should be exercised
+with real flags or documented as aspirational. Both are now decided,
+**as-is, with no code change**:
+
+- **Exception granularity is ratified as the intentional, required
+  shape of a provider's error model.** `ClaudeProviderError`/
+  `ClaudeAuthenticationError`/`ClaudeTimeoutError`/`ClaudeConnectionError`/
+  `ClaudeResponseError` and `OpenAIProvider`'s equivalent five-class
+  hierarchy are the stable `1.0.0` contract, not a provisional pattern
+  awaiting a consumer. Any future provider (see "Convention for future
+  providers" above) is expected to define the same five-class shape
+  (a base `<Vendor>ProviderError` plus `Authentication`/`Timeout`/
+  `Connection`/`Response` subclasses translating that vendor's own SDK
+  exceptions), whether or not anything in the kernel yet catches the
+  specific subclasses — the granularity documents *what kind of failure
+  occurred* for whatever catches `ProviderError` broadly today, and is
+  available for a future consumer to narrow on without a contract
+  change when one exists.
+- **`ProviderCapabilities`'s current all-`False` values are accurate,
+  not aspirational or unproven.** Both `ClaudeProvider` and
+  `OpenAIProvider` genuinely support only synchronous, plain-text
+  request/response in this sprint's scope — streaming, tool calls,
+  vision, and embeddings are simply not implemented by either, so
+  `ProviderCapabilities()`'s defaults describe them correctly. This
+  matches the "descriptive metadata only" scope already stated above;
+  no code change is needed for the metadata to be honest.
+
 ## Dependency relationship
 
 `providers` depends only on `core` (for `KernelError`), matching the

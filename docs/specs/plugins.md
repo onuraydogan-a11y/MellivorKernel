@@ -172,6 +172,20 @@ raises `StartupError` on a startup failure. `FAILED` is not retryable via
 `initialize()`/`start()`/`stop()`; `dispose()` remains available from it
 for cleanup.
 
+**`PluginLifecycle.plugin` is a cooperative discipline, not an
+enforcement boundary (v1.0 scope note, Sprint 25 Public API Freeze
+Audit).** `.plugin` returns the wrapped `Plugin` instance directly, and
+`PluginRegistry.lookup()` independently returns the same raw instance to
+any caller — either path lets code call `Plugin.initialize()`/`.start()`/
+`.stop()`/`.dispose()` directly, bypassing this class's state-machine
+guard entirely. This is ratified as intentional, stable `1.0.0` scope,
+consistent with `plugin_discovery`'s own stated trust model ("a
+discovered plugin's code is imported and executed with the same trust as
+any other import in the running process"): `PluginLifecycle` exists to
+give a *cooperating* caller (such as `ai_engine.AIEngine`) a correctly
+sequenced lifecycle, not to prevent a caller who bypasses it from doing
+so. No code change results from this ratification.
+
 ## `PluginRegistry`
 
 Holds loaded plugin instances, keyed by each plugin's own

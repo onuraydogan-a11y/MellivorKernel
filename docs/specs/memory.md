@@ -110,6 +110,17 @@ delegating to `store`. Structurally satisfies `MemoryStore` itself, so a
 `Memory` instance can be passed anywhere a `MemoryStore` is expected —
 including `ExecutionEngine`'s `memory` parameter (see below).
 
+**v1.0 scope note (Sprint 25 Public API Freeze Audit).** `Memory` has no
+production consumer anywhere in the kernel today — every real usage
+(`execution`, `ai_engine`) passes an `InMemoryStore` or another
+`MemoryStore`-conforming object directly, never a `Memory` instance.
+`Memory` is proven by its own unit tests, not by internal usage. This is
+ratified as intentional, stable `1.0.0` scope: a facade offered for a
+consuming product's convenience, not required by anything in the kernel
+itself, the same "foundation ships ahead of its consumer" shape ADR-0012/
+ADR-0013 already used for `security`/`observability`. No code change
+results from this ratification.
+
 ## Integration: `execution`
 
 `ExecutionEngine.__init__` gained an optional `memory: MemoryStore | None = None`

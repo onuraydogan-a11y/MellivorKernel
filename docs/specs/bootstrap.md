@@ -159,6 +159,23 @@ reference internally, added without changing `ExecutionContext` or any
 other existing symbol. `bootstrap` now depends on `execution` as well (see
 below) — an additive dependency, not a change to any existing contract.
 
+### The `runtime: Kernel` boundary, stated precisely (v1.0 scope note, Sprint 25 Public API Freeze Audit)
+
+`RuntimeContext` is the **only** place in the kernel that never exposes
+the raw `Kernel` it wraps. Every `*Context` dataclass a consumer actually
+receives — `ToolContext`, `ExecutionContext`, `WorkflowContext` (via its
+wrapped `ExecutionContext`), `AgentContext` (via `WorkflowContext`),
+`PluginContext` — carries `runtime: Kernel` directly, by design, because
+each needs a real `Kernel` to be constructed at all (see above). This
+means the "no raw `Kernel` access" guarantee holds only at the
+`RuntimeContext` boundary itself; once any of those `*Context` objects
+is handed to code (a tool, a workflow step, an agent, a plugin), that
+code holds a real `Kernel` reference, including its `.container`. This
+is ratified as intentional, stable `1.0.0` scope — it is the necessary
+consequence of every one of those contexts needing a real `Kernel` to
+exist, not an oversight in any one package. No code change results from
+this ratification.
+
 ## Dependency relationship
 
 ```

@@ -83,3 +83,20 @@ business-agnostic. The package does not add product policy, user identity,
 or application-level authorization logic. It only provides the reusable,
 compile-time-visible contracts and runtime primitives required for a future
 product or subsystem to build those capabilities safely.
+
+## v1.0 scope note (Sprint 25 Public API Freeze Audit)
+
+`AuditRecord`/`AuditSink` are proven by internal usage —
+`authorization.AuthorizationEngine` has recorded every grant/deny
+decision through a configured `AuditSink` since Sprint 17. `Secret`/
+`SecretProvider`/`SecretProviderRegistry` and the `SecurityPolicy`/
+`SecureConfiguration` protocols have no production consumer anywhere in
+the kernel; they are exercised only by structural fakes in this
+package's own tests. This was already the explicit, accepted premise of
+this sprint's own scope ("not yet consumed by any other subsystem") and
+of [ADR-0019](../adr/0019-release-readiness-and-scope-lock.md)'s
+"bring your own backend" classification of this responsibility. Ratified
+as intentional, stable `1.0.0` scope: these contracts exist for a future
+concrete backend to implement against, not because anything in the
+kernel itself calls them yet. No code change results from this
+ratification.

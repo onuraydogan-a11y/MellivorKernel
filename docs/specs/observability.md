@@ -58,3 +58,20 @@ attribute payload.
 The package offers no-op implementations so that the core kernel can ship a
 foundation with no mandatory backend configuration. All backend-specific
 concerns remain out of the `mellivor_kernel` package boundary.
+
+## v1.0 scope note (Sprint 25 Public API Freeze Audit)
+
+`StructuredEventSink`/`StructuredObservationEvent` are proven by internal
+usage — `execution.ExecutionEngine` has emitted through a configured
+`StructuredEventSink` since Sprint 17. `MetricsRecorder`, `TraceRecorder`/
+`TraceSpan`, both `NoOp*` implementations, and the `Observability`
+dependency-injection wrapper class have no production consumer anywhere
+in the kernel; `Observability` itself is instantiated only in this
+package's own unit tests. This was already the explicit, accepted
+premise of this sprint's own scope and of
+[ADR-0019](../adr/0019-release-readiness-and-scope-lock.md)'s "bring
+your own backend" classification of this responsibility. Ratified as
+intentional, stable `1.0.0` scope: these contracts and the `Observability`
+wrapper exist for a future concrete metrics/tracing backend to build on,
+not because anything in the kernel itself calls them yet. No code change
+results from this ratification.
