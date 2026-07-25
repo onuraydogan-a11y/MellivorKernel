@@ -48,3 +48,4 @@ Small, local, easily reversible choices do not need an ADR.
 | [0016](0016-system-info-built-in-plugin.md) | System Information built-in plugin | Accepted |
 | [0017](0017-plugin-discovery-foundation.md) | Plugin Discovery Foundation | Accepted |
 | [0018](0018-ai-engine-foundation.md) | AI Engine Foundation | Accepted |
+| [0019](0019-release-readiness-and-scope-lock.md) | Release Readiness & Scope Lock | Accepted |

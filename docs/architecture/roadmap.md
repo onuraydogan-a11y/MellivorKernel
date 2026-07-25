@@ -7,6 +7,12 @@ as a living document rather than frozen inside one release's notes.
 release actually shipped; this file is where roadmap content should be
 updated going forward.
 
+**A note on Sprints 21–23.** This file was not updated during those three
+sprints, per each sprint's own explicit instruction at the time (their
+scope was additive implementation, and touching the roadmap was
+deliberately excluded to keep each sprint's diff scoped to its own
+package). Sprint 24 backfills all three below, then adds itself.
+
 Status as of Sprint 20: Sprints 1–5 shipped `core`, `config`, `providers`
 (interfaces only, no concrete implementation), `tools`, and `bootstrap`.
 Sprint 6 shipped `execution` (Execution Core) — see
@@ -120,7 +126,41 @@ through the complete Loader → Registry → Lifecycle path against a real
 discovery; `plugins_builtin` depends on `plugin_sdk`, `plugins`,
 `providers`, `tools`, `core`, and `version` — the same latitude
 `tools.builtin` already has — see
-[ADR-0016](../adr/0016-system-info-built-in-plugin.md).
+[ADR-0016](../adr/0016-system-info-built-in-plugin.md). Sprint 21 shipped
+the **Plugin Discovery Foundation** (`plugin_discovery`) — exactly one
+class, `PluginDiscovery`, discovering plugins from a filesystem location
+and loading/registering them through the existing, unmodified
+`PluginLoader`/`PluginRegistry`, introducing no new loading, validation,
+or registration logic of its own. Depends only on `plugins` and `core`;
+no marketplace, remote plugins, sandboxing, hot reload, signature
+verification, or package installation — see
+[ADR-0017](../adr/0017-plugin-discovery-foundation.md). Sprint 22
+shipped the **AI Engine Foundation** (`ai_engine`) — a pure composition
+layer, `AIEngineBuilder`/`AIEngine`, assembling an already-bootstrapped
+`RuntimeContext` and the orchestration-chain engines (`execution`/
+`workflow`/`agents`, with `authorization` optionally consulted) plus a
+`PluginRegistry`, closing the gap between "every capability ADR-0002
+names exists" and "a product can adopt the kernel through one entry
+point." Introduces no business logic, chat feature, prompting,
+reasoning, planning, orchestration decision, or provider-selection logic
+of its own; not a new ADR-0002 responsibility, since it composes
+responsibilities that already exist — see
+[ADR-0018](../adr/0018-ai-engine-foundation.md). Sprint 23 shipped the
+kernel's second concrete provider, `providers.openai.OpenAIProvider`
+(OpenAI Chat Completions API) — deliberately a structurally different
+request shape than `ClaudeProvider`'s (a multi-turn message list, not a
+flat prompt string), proving `BaseProvider`'s contract generalizes a
+second time with no change to it. No ADR was needed, matching Sprint
+10's own precedent for the first optional vendor dependency; see the
+`OpenAIProvider` section of
+[`docs/specs/providers.md`](../specs/providers.md). Sprint 24 was a
+documentation-only **Release Readiness & Scope Lock**: every ADR-0002
+responsibility was classified as `Included in v1.0`, `Deferred to v1.1`,
+or `Future research`, closing the release checklist's previously-open
+"the release decision is recorded in an ADR" gate item — see
+[ADR-0019](../adr/0019-release-readiness-and-scope-lock.md) and the
+updated [`docs/release/v1.0-release-checklist.md`](../release/v1.0-release-checklist.md).
+
 What follows is the approved recommendation for the remaining sprints.
 
 Recommendation, not a decision — architecture and sprint sequencing remain
@@ -145,24 +185,44 @@ first, `agents`/`workflow` last since they're consumers of everything else.
 | 18 | ~~Plugin loading (`plugins`)~~ → **Plugin Runtime Foundation** (`plugins`), shipped | Finally delivered after three consecutive deferrals (Sprints 12, 13A, and again after Sprint 14): the last fully-unimplemented ADR-0002 responsibility. Foundation-only, deliberately separated from discovery (a meaningfully larger, separate concern per ADR-0014). |
 | 19 | **Plugin SDK Foundation** (`plugin_sdk`), shipped | Immediate follow-on to Sprint 18: the runtime contract was correct but unopinionated, the same gap `bootstrap.BootstrapBuilder` and `tools.builtin` each closed for their own layers. |
 | 20 | **First built-in plugin** (`plugins_builtin.SystemInfoPlugin`), shipped | Proves Sprints 18–19 end to end against a real plugin, mirroring how `tools.builtin`'s three demonstration tools proved the Tool Runtime — required before either foundation's contract shape can be considered settled. |
+| 21 | **Plugin Discovery Foundation** (`plugin_discovery`), shipped | Delivers the one piece of Plugin loading Sprints 18–20 deliberately deferred: real filesystem discovery, through the existing, unmodified `PluginLoader`/`PluginRegistry`. See ADR-0017. |
+| 22 | **AI Engine Foundation** (`ai_engine`), shipped | Closes the composition gap between "every ADR-0002 capability exists" and "a product can adopt the kernel through one entry point" — ranked highest in a dedicated Architecture Challenge against a second built-in plugin and an additional provider. See ADR-0018. |
+| 23 | **Additional Provider Foundation** (`providers.openai.OpenAIProvider`), shipped | Proves `BaseProvider` generalizes a second time, deliberately against a structurally different request shape than Claude's. No ADR needed, matching Sprint 10's own precedent. |
+| 24 | **Release Readiness & Scope Lock**, shipped (documentation only) | Resolves the release checklist's own named prerequisite (ADR-0005: "a decision to be made explicitly via a future ADR") before any further capability sprint, since every remaining candidate's own checklist row required a decision before an implementation. See ADR-0019. |
 
-**Beyond sprint 20 (not scheduled):** the remainder of **Plugin loading**
-beyond Sprints 18–20 (filesystem/entry-point discovery, a plugin
-marketplace, sandboxing, and additional built-in plugins beyond
-`SystemInfoPlugin` — all explicitly deferred per ADR-0014/ADR-0016),
-richer agent capabilities (planning, reasoning, reflection, multi-agent
-composition, dynamic workflow selection — all deliberately deferred past
-Sprint 13A), additional concrete providers (OpenAI, Gemini, Ollama —
-explicitly out of scope for Sprint 10), a provider-side memory-consumption
-mechanism (a provider reading prior memory as conversation context),
-dynamic workflow steps (a step's request built from an earlier step's
-result — deliberately not built in Sprint 12), parallel/scheduled workflow
-execution, embeddings/vector search/RAG for `memory`, the remainder of
-**Security primitives** beyond the Sprint 15 foundation and Sprint 17's
-`AuditSink` wiring (a concrete `SecretProvider` backend, authentication,
-OAuth, SSO, RBAC, encryption), and the remainder of **Observability**
-beyond the Sprint 16 foundation and Sprint 17's `StructuredEventSink`
-wiring (a concrete metrics/tracing backend or vendor integration, and a
-trace/audit consumer built on top of `events`) — all still open per
-ADR-0002, with no placement decided beyond what Sprints 15–20 already
-placed.
+**Beyond Sprint 24: classified, not scheduled.** As of Sprint 24
+([ADR-0019](../adr/0019-release-readiness-and-scope-lock.md)), every
+remaining item below has a stated classification — it is no longer an
+undifferentiated backlog. See
+[`docs/release/v1.0-release-checklist.md`](../release/v1.0-release-checklist.md)
+for the responsibility-by-responsibility detail behind each entry.
+
+**Deferred to v1.1** — real, scoped, schedulable directly once `1.0.0`
+ships, with no further design gate needed first:
+
+- Workflow: dynamic steps (a step's request built from an earlier step's
+  result), parallel execution, scheduling.
+- Memory: a second, persistent `MemoryStore` implementation (mirroring
+  the `providers` precedent — a second concrete implementation proving
+  the abstraction).
+- Providers: additional concrete providers (Gemini, local models).
+- Security: a concrete `SecretProvider` backend (the same proven
+  pattern as a second provider).
+
+**Future research** — open-ended, no committed design or timeline; some
+of these raise a genuine, unresolved question of whether the capability
+belongs in the kernel at all versus a consuming product, per
+[ADR-0003](../adr/0003-repository-boundaries.md), and would need their
+own Architecture Challenge before being scheduled:
+
+- Agent lifecycle: planning, reasoning, reflection, multi-agent
+  composition, dynamic workflow selection.
+- Memory: a provider-side memory-consumption mechanism (a provider
+  reading prior memory as conversation context), embeddings, vector
+  search, RAG.
+- Plugin loading: a marketplace, remote plugins, sandboxing, hot reload,
+  signature verification, package installation.
+- Event bus: distributed delivery (Kafka/NATS/Redis-backed).
+- Observability: a concrete metrics/tracing backend or vendor
+  integration, and a trace/audit consumer built on top of `events`.
+- Security: authentication, OAuth, SSO, RBAC, encryption.
