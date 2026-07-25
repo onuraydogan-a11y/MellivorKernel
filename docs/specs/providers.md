@@ -250,10 +250,118 @@ the full `ExecutionRequest -> ExecutionEngine -> Authorization ->
 Dispatcher -> ClaudeProvider -> ExecutionResult` flow with `execution` and
 `authorization` completely unmodified.
 
+## `OpenAIProvider` (Sprint 23)
+
+`mellivor_kernel.providers.openai.OpenAIProvider` — a `BaseProvider`
+implementation backed by the OpenAI Chat Completions API, and the
+kernel's second concrete provider. Proves `BaseProvider`'s existing
+contract generalizes to a genuinely different request shape than
+`ClaudeProvider`'s, not a second copy of it — deliberately chosen for
+that reason (see [ADR-0018](../adr/0018-ai-engine-foundation.md)'s own
+"smallest useful slice" reasoning, applied here to provider selection).
+**Not exported from `mellivor_kernel.providers.__all__`** — imported
+explicitly from `mellivor_kernel.providers.openai`, the same separation
+`ClaudeProvider` keeps from the base `providers` package.
+
+**Optional dependency.** Requires the `openai` package:
+`pip install mellivor-kernel[openai]`. `providers/openai.py` is the only
+module anywhere in this repository that imports `openai` — no other
+kernel code imports this module or the SDK, mirroring `claude.py`'s
+isolation of `anthropic` exactly.
+
+**Scope, deliberately minimal:** synchronous request/response, plain
+message-list prompts, plain text responses. No streaming, tool calling,
+vision, JSON mode, function calling, prompt caching, or batch
+execution — the same exclusions `ClaudeProvider` already established,
+applied identically here.
+
+### Configuration
+
+Read only from the existing `ProviderConfiguration` — no provider-specific
+global configuration is introduced, following the convention
+`ClaudeProvider`'s own spec section already states for future providers:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `api_key` | **Yes** | The OpenAI API key. **Does not fall back to the `OPENAI_API_KEY` environment variable** — the OpenAI SDK does that by default; `OpenAIProvider` raises `ProviderConfigurationError` at construction if unset, for the same reason `ClaudeProvider` does. |
+| `default_model` | **Yes** | The model used for every request (e.g. `"gpt-4o"`). Raises `ProviderConfigurationError` at construction if unset. |
+| `timeout_seconds` | No | Passed through to the OpenAI client's own `timeout`. Defaults to `ProviderConfiguration`'s own default (`30.0`). |
+| `base_url` | No | Passed through as given; `None` leaves the OpenAI client's own default/environment-driven resolution in place, the same non-credential exception `ClaudeProvider` already documents for this field. |
+| `max_retries` | No | Passed through to the OpenAI client's own retry mechanism. |
+
+### Request / response shape
+
+`invoke()`'s request and response are each a plain `Mapping[str, object]`,
+defined on their own terms rather than reused from `ClaudeProvider` — a
+deliberate structural difference proving `BaseProvider`'s generic
+contract accommodates more than one shape:
+
+```python
+request = {"messages": list[{"role": str, "content": str}], "max_tokens": int | None}
+response = {
+    "text": str,
+    "model": str,
+    "finish_reason": str | None,
+    "prompt_tokens": int,
+    "completion_tokens": int,
+}
+```
+
+`messages` is required (a non-empty list, each entry a mapping with
+string `role` and string `content` — including a system prompt, which
+OpenAI expresses as an ordinary message with `role: "system"` rather
+than `ClaudeProvider`'s separate `system` field; this is the one
+concrete API-shape difference this sprint is designed to surface, not
+paper over). `max_tokens` (default `1024`, for consistency with
+`ClaudeProvider`'s own request-shape convention, though the OpenAI API
+itself does not require it) is optional.
+
+### Error model
+
+`providers/openai.py`'s own exception hierarchy, all subclassing
+`ProviderError` — no `openai` SDK exception ever escapes
+`OpenAIProvider`:
+
+- `OpenAIProviderError` — base class; also raised for malformed requests
+  and any OpenAI API failure not covered by a more specific type below.
+- `OpenAIAuthenticationError` — the API rejected the configured
+  credentials (`openai.AuthenticationError`).
+- `OpenAITimeoutError` — the request timed out (`openai.APITimeoutError`,
+  which the SDK defines as a subclass of `APIConnectionError` — caught
+  ahead of it, the same ordering `ClaudeProvider` already uses for the
+  equivalent `anthropic` pair).
+- `OpenAIConnectionError` — a network failure prevented the request from
+  completing (`openai.APIConnectionError`).
+- `OpenAIResponseError` — the response contained no text content (for
+  example, a tool-call-only response, which this sprint's plain-text
+  scope does not interpret).
+
+### `check_health()`
+
+Issues a minimal real request (`max_tokens=1`) through the same client
+and error handling `invoke()` uses, reporting `healthy=False` with the
+failure's detail on any `openai.OpenAIError` rather than raising — a
+live reachability check, the same shape `ClaudeProvider.check_health()`
+already uses.
+
+### Registration
+
+No bootstrap wiring is added — `OpenAIProvider` is registered the same
+way any provider is, via the existing `ProviderFactory`/`ProviderRegistry`
+composition, or directly: `registry.register(OpenAIProvider(configuration))`.
+See `tests/test_openai_provider_integration.py` for the full
+`AIEngineBuilder -> AIEngine.execute() -> ExecutionEngine -> Dispatcher ->
+OpenAIProvider -> ExecutionResult` flow — routed through the AI Engine
+Foundation ([ADR-0018](../adr/0018-ai-engine-foundation.md)) rather than
+a hand-built `Dispatcher`/`ExecutionEngine`, unlike `ClaudeProvider`'s own
+Sprint 10 integration test, which predates `ai_engine`'s existence.
+
 ## Dependency relationship
 
 `providers` depends only on `core` (for `KernelError`), matching the
 `config → core` precedent from Sprint 2. `core` has no dependency on
 `providers`. `providers` has no dependency on `config` or any other
 subsystem. `providers/claude.py` additionally depends on the optional
-`anthropic` package — the only file in this repository that does.
+`anthropic` package, and `providers/openai.py` additionally depends on
+the optional `openai` package — each the only file in this repository
+that imports its respective SDK, and neither depends on the other.

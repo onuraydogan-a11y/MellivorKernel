@@ -43,5 +43,14 @@ examples never become a dependency of the kernel itself.
   alone -- no engine constructed by hand, unlike every example above --
   then discovers and runs the `system-info` sample plugin through
   `with_plugin_discovery()`.
+- [`openai_provider_invocation.py`](openai_provider_invocation.py) — the
+  kernel's second concrete provider, `OpenAIProvider` (Sprint 23),
+  registered into a `ProviderRegistry` and invoked through
+  `AIEngineBuilder`/`AIEngine.execute()` -- not a hand-built
+  `Dispatcher`/`ExecutionEngine`, unlike `execution_provider_invocation.py`
+  above, which predates the AI Engine Foundation. Uses a fake, injected
+  OpenAI client (no live API call, no API key needed), the same way
+  `execution_provider_invocation.py`'s `EchoProvider` calls nothing
+  external.
 
 Run any of them with `python examples/<name>.py` from the repository root.

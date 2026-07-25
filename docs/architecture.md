@@ -1,8 +1,8 @@
 # Mellivor Kernel — High-Level Architecture
 
 Status: Release Candidate (v0.13.0). `core`, `config`, `tools`,
-`providers` (interfaces plus the `ClaudeProvider` reference
-implementation), `bootstrap`, `execution`, `authorization`, `events`,
+`providers` (interfaces plus the `ClaudeProvider` and `OpenAIProvider`
+concrete implementations), `bootstrap`, `execution`, `authorization`, `events`,
 `memory`, `workflow`, a first slice of `agents`, and foundation-only
 `security`, `observability`, `plugins`, `plugin_sdk`, `plugins_builtin`,
 `plugin_discovery`, and `ai_engine` packages are implemented — see each
@@ -182,7 +182,12 @@ Per ADR-0002, the kernel's responsibilities are limited to exactly:
   versioned. The interface (`BaseProvider`, `ProviderRegistry`,
   `ProviderFactory`) shipped in Sprint 3; the first concrete
   implementation, `providers.claude.ClaudeProvider` (Anthropic Messages
-  API), shipped in Sprint 10 with no change to that interface — see
+  API), shipped in Sprint 10 with no change to that interface. Sprint 23
+  added a second concrete implementation, `providers.openai.OpenAIProvider`
+  (OpenAI Chat Completions API) — deliberately a structurally different
+  request shape (a multi-turn message list, not `ClaudeProvider`'s flat
+  prompt string) proving `BaseProvider`'s contract generalizes, again
+  with no change to it — see
   [`docs/specs/providers.md`](specs/providers.md).
 
 ### AI orchestration: placed in `execution` (Sprint 6)

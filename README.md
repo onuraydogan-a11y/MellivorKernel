@@ -113,12 +113,12 @@ pip install -e ".[dev]"
 pre-commit install
 ```
 
-Tests for `providers.claude.ClaudeProvider` require the optional
-`anthropic` package; without it (plain `[dev]`) those two test files
-skip cleanly rather than failing. Install
-`pip install -e ".[dev,anthropic]"` to also exercise them (CI does this).
-They never call the live API — only real `anthropic` SDK types are used,
-with a fake client injected in place of network I/O.
+Tests for `providers.claude.ClaudeProvider` and `providers.openai.OpenAIProvider`
+require their respective optional `anthropic`/`openai` packages; without
+them (plain `[dev]`) those test files skip cleanly rather than failing.
+Install `pip install -e ".[dev,anthropic,openai]"` to also exercise them
+(CI does this). Neither ever calls a live API — only real SDK types are
+used, with a fake client injected in place of network I/O.
 
 ```bash
 ruff check .          # lint
@@ -156,10 +156,13 @@ Implemented so far: `core` (exceptions, the
 `ServiceContainer` DI container, structured logging, and the `Kernel`
 runtime/lifecycle), `config` (`KernelConfig`, `Environment`, `load_config`),
 `providers` (the `BaseProvider` contract, `ProviderRegistry`,
-`ProviderFactory`, plus one concrete provider —
-`providers.claude.ClaudeProvider`, backed by the Anthropic Messages API;
-optional, requires `pip install mellivor-kernel[anthropic]`; no OpenAI/
-Gemini/local-model integration yet), `tools` (the `BaseTool`
+`ProviderFactory`, plus two concrete providers —
+`providers.claude.ClaudeProvider`, backed by the Anthropic Messages API
+(optional, requires `pip install mellivor-kernel[anthropic]`), and
+`providers.openai.OpenAIProvider`, backed by the OpenAI Chat Completions
+API (optional, requires `pip install mellivor-kernel[openai]`); neither
+exported from `providers.__all__`, each importable explicitly from its
+own module; no Gemini/local-model integration yet), `tools` (the `BaseTool`
 contract, `ToolRegistry`, the permission model, and the
 `ToolExecutionPipeline`, plus three demonstration tools —
 `EchoTool`/`HealthCheckTool`/`VersionTool` — that call no external API),
