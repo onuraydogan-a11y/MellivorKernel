@@ -56,8 +56,11 @@ attribute payload.
 ## No-op default behavior
 
 The package offers no-op implementations so that the core kernel can ship a
-foundation with no mandatory backend configuration. All backend-specific
-concerns remain out of the `mellivor_kernel` package boundary.
+foundation with no mandatory backend configuration: `NoOpMetricsRecorder`
+(discards metric observations), `NoOpTraceRecorder` (returns a span whose
+`end()` is a no-op), and `NoOpStructuredEventSink` (discards structured
+events). All backend-specific concerns remain out of the `mellivor_kernel`
+package boundary.
 
 ## v1.0 scope note (Sprint 25 Public API Freeze Audit)
 
