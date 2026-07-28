@@ -1,6 +1,7 @@
 # Mellivor Kernel — High-Level Architecture
 
-Status: Release Candidate (v0.13.0). `core`, `config`, `tools`,
+Status: Stable v1.0.0, per [ADR-0020](adr/0020-release-decision-v1.0.md).
+`core`, `config`, `tools`,
 `providers` (interfaces plus the `ClaudeProvider` and `OpenAIProvider`
 concrete implementations), `bootstrap`, `execution`, `authorization`, `events`,
 `memory`, `workflow`, a first slice of `agents`, and foundation-only

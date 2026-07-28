@@ -47,10 +47,11 @@ for the full scope decision behind this vision.
 - Not a CRM, Legal, HR, Finance, Security, or any other business application.
 - Not a UI.
 - Not a home for business modules or product-specific logic.
-- Not yet a complete implementation of every responsibility in
-  [ADR-0002](docs/adr/0002-ai-enterprise-kernel-scope-and-subsystems.md)
-  — see [Status](#status) below for exactly what is and isn't
-  implemented.
+- Not a complete implementation of the richest possible version of every
+  responsibility in [ADR-0002](docs/adr/0002-ai-enterprise-kernel-scope-and-subsystems.md)
+  — several ship a stable baseline with richer capability deferred by
+  design; see [Status](#status) below for exactly what `1.0.0` covers and
+  what's deferred.
 
 ## Architecture
 
@@ -132,25 +133,29 @@ pull request against `main`, on Python 3.12 and 3.13.
 
 ## Status
 
-**Release Candidate (v0.13.0).** Not yet `1.0.0` — per
-[ADR-0005](docs/adr/0005-versioning-strategy.md), that version number is
-reserved for an explicit future decision once every responsibility in
-ADR-0002 is stable, which is not yet the case (`agents` is a first,
-deliberately minimal slice; `security` and `observability` are
-foundation-only — contracts and primitives with no concrete secret
-backend, authentication, encryption, metrics/tracing vendor, or
-telemetry export, and neither is consumed by any other subsystem except
-where Sprint 17 wired them into `authorization`/`execution`; `plugin_sdk`
-is a convenience layer over `plugins` whose only consumer is
-`plugins_builtin`, the kernel's first built-in plugin; `plugin_discovery`
-adds filesystem discovery but no marketplace, remote plugins, sandboxing,
-hot reload, signature verification, or package installation; `ai_engine`
-composes the orchestration chain but adds no business logic, chat
-feature, prompting, reasoning, planning, orchestration decision, or
-provider-selection logic of its own). See
+**Stable v1.0.0.** Per [ADR-0005](docs/adr/0005-versioning-strategy.md),
+`1.0.0` is reserved for the explicit decision that every responsibility in
+ADR-0002 has a stable, documented contract. That decision is recorded in
+[ADR-0020](docs/adr/0020-release-decision-v1.0.md), following the scope
+classification [ADR-0019](docs/adr/0019-release-readiness-and-scope-lock.md)
+established: every `Included in v1.0` responsibility is satisfied, with
+richer capability for several of them deliberately deferred rather than
+promised by this release (`agents` is a first, deliberately minimal slice;
+`security` and `observability` are foundation-only — contracts and
+primitives with no concrete secret backend, authentication, encryption,
+metrics/tracing vendor, or telemetry export, and neither is consumed by any
+other subsystem except where Sprint 17 wired them into
+`authorization`/`execution`; `plugin_sdk` is a convenience layer over
+`plugins` whose only consumer is `plugins_builtin`, the kernel's first
+built-in plugin; `plugin_discovery` adds filesystem discovery but no
+marketplace, remote plugins, sandboxing, hot reload, signature
+verification, or package installation; `ai_engine` composes the
+orchestration chain but adds no business logic, chat feature, prompting,
+reasoning, planning, orchestration decision, or provider-selection logic of
+its own). See
 [`docs/release/v1.0-release-checklist.md`](docs/release/v1.0-release-checklist.md)
-for the complete release-readiness assessment, including known
-limitations.
+and [`RELEASE_NOTES_v1.0.0.md`](RELEASE_NOTES_v1.0.0.md) for the complete
+release record, including deferred scope and known limitations.
 
 Implemented so far: `core` (exceptions, the
 `ServiceContainer` DI container, structured logging, and the `Kernel`
