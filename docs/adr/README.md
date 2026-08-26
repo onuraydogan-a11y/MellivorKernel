@@ -52,3 +52,4 @@ Small, local, easily reversible choices do not need an ADR.
 | [0020](0020-release-decision-v1.0.md) | Release Decision: Mellivor Kernel v1.0.0 | Accepted |
 | [0021](0021-persistent-memory-sqlite-store.md) | Persistent memory: `SQLiteMemoryStore` | Accepted |
 | [0022](0022-env-secret-provider.md) | Concrete `SecretProvider` backend: `EnvSecretProvider` | Accepted |
+| [0023](0023-gemini-provider.md) | Third concrete provider: `GeminiProvider` | Accepted |

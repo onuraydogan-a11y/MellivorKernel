@@ -1,7 +1,8 @@
 # `providers` subsystem spec
 
 Status: Implemented (Sprint 3: interfaces and registry; Sprint 10: first
-concrete provider, `ClaudeProvider`).
+concrete provider, `ClaudeProvider`; Sprint 23: second, `OpenAIProvider`;
+Sprint 29: third, `GeminiProvider`).
 
 Public contract exported from `mellivor_kernel.providers`. Anything not
 listed here is internal and carries no compatibility guarantee, per
@@ -356,6 +357,135 @@ Foundation ([ADR-0018](../adr/0018-ai-engine-foundation.md)) rather than
 a hand-built `Dispatcher`/`ExecutionEngine`, unlike `ClaudeProvider`'s own
 Sprint 10 integration test, which predates `ai_engine`'s existence.
 
+## `GeminiProvider` (Sprint 29)
+
+`mellivor_kernel.providers.gemini.GeminiProvider` — a `BaseProvider`
+implementation backed by the Gemini Developer API, and the kernel's
+third concrete provider. Proves `BaseProvider`'s existing contract
+generalizes to a genuinely different vendor SDK integration shape than
+either existing provider's (a `.code`-based error model instead of
+dedicated exception subclasses, and transport-level failures the SDK
+does not itself wrap) — see
+[ADR-0023](../adr/0023-gemini-provider.md) for the full design,
+including why `google-genai` (not the deprecated
+`google-generativeai` package) was selected. **Not exported from
+`mellivor_kernel.providers.__all__`** — imported explicitly from
+`mellivor_kernel.providers.gemini`, the same separation `ClaudeProvider`/
+`OpenAIProvider` already keep from the base `providers` package.
+
+**Optional dependency.** Requires the `google-genai` package:
+`pip install mellivor-kernel[gemini]` (`google-genai>=2.0`).
+`providers/gemini.py` is the only module anywhere in this repository
+that imports `google.genai` — no other kernel code imports this module
+or the SDK, mirroring `claude.py`'s/`openai.py`'s isolation exactly.
+
+**Scope, deliberately minimal:** synchronous request/response, plain
+message-list prompts (reusing `OpenAIProvider`'s request/response key
+names, not inventing a third vocabulary), plain text responses. No
+streaming, tool calling, vision, multimodal input, Vertex AI
+authentication, context caching, or batch execution — the same
+exclusions `ClaudeProvider`/`OpenAIProvider` already established, applied
+identically here; see ADR-0023's "Intentionally unsupported Gemini-
+specific features" for the complete, explicit list.
+
+### Configuration
+
+Read only from the existing `ProviderConfiguration` — no provider-specific
+global configuration is introduced, following the same convention
+`ClaudeProvider`'s spec section states for future providers:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `api_key` | **Yes** | The Gemini Developer API key. **Does not fall back to the `GOOGLE_API_KEY`/`GEMINI_API_KEY` environment variables** — the SDK does that by default; `GeminiProvider` raises `ProviderConfigurationError` at construction if unset, for the same reason `ClaudeProvider`/`OpenAIProvider` do. |
+| `default_model` | **Yes** | The model used for every request (e.g. `"gemini-2.0-flash-001"`). Raises `ProviderConfigurationError` at construction if unset. |
+| `timeout_seconds` | No | Passed through, converted to milliseconds, via `genai.Client(http_options=types.HttpOptions(timeout=...))` — a real, verified structural difference from `anthropic`/`openai`, which take `timeout` directly on the client. **Known vendor-SDK limitation:** `google-genai` has a documented issue where this can be overridden internally in some code paths; not something this provider can fix. |
+| `base_url` | No | Also passed through via `http_options`, not a direct client kwarg (see above). `None` leaves the SDK's own default endpoint in place. |
+| `max_retries` | No | Passed through via `http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=...))`. |
+
+Gemini Developer API authentication only (`api_key`) — Vertex AI's
+project/location-based authentication is not supported; see ADR-0023.
+
+### Request / response shape
+
+```python
+request = {"messages": list[{"role": str, "content": str}], "max_tokens": int | None}
+response = {
+    "text": str,
+    "model": str,
+    "finish_reason": str | None,
+    "prompt_tokens": int,
+    "completion_tokens": int,
+}
+```
+
+Deliberately reuses `OpenAIProvider`'s key names (`messages`,
+`finish_reason`, `prompt_tokens`, `completion_tokens`) rather than
+inventing Gemini-specific ones — this sprint's proof point is
+vendor-neutrality of the provider *contract*, not a fourth distinct
+schema. `messages` is required (a non-empty list, each entry a mapping
+with string `role`/`content`). Role mapping:
+
+| Kernel `role` | Gemini destination |
+|---|---|
+| `"system"` | `GenerateContentConfig.system_instruction` — **not** a `contents` entry (unlike OpenAI, Gemini does not accept a `"system"` role inside its message list). At most one; a second raises `GeminiProviderError`. |
+| `"user"` | Gemini `Content(role="user", ...)` — passthrough. |
+| `"assistant"` | Gemini `Content(role="model", ...)` — **translated**, since Gemini's own vocabulary for a model turn is `"model"`. |
+| anything else | Rejected with `GeminiProviderError`. |
+
+`response["model"]` is the configured/requested model
+(`self._model`), not echoed from the response object — a deliberate
+difference from `ClaudeProvider`/`OpenAIProvider`, which echo the
+response's own `model` field; see ADR-0023's "Response normalization."
+A response (or the prompt itself) with no usable text — including a
+safety-filtered block — raises `GeminiResponseError` naming
+`prompt_feedback.block_reason` or the candidate's `finish_reason`; see
+ADR-0023's "Safety/filter response handling." `max_tokens` (default
+`1024`) maps to `GenerateContentConfig.max_output_tokens`.
+
+### Error model
+
+`providers/gemini.py`'s own exception hierarchy, all subclassing
+`ProviderError` — no `google.genai`/`httpx` exception ever escapes
+`GeminiProvider`:
+
+- `GeminiProviderError` — base class; also raised for malformed requests
+  and any Gemini API failure not covered by a more specific type below,
+  **including a `429` rate-limit response** (`google-genai` has no
+  dedicated rate-limit exception type, only a `.code`-based `ClientError`
+  — the same generic bucket `ClaudeProvider`/`OpenAIProvider` already
+  use for a rate limit today).
+- `GeminiAuthenticationError` — the API rejected the configured
+  credentials (`google.genai.errors.APIError` with `.code` `401` or
+  `403` — `google-genai` has no dedicated authentication exception
+  type, unlike `anthropic`/`openai`; detected by status code instead).
+- `GeminiTimeoutError` — the request timed out (`httpx.TimeoutException`
+  — `google-genai` does not wrap transport-level failures itself; the
+  underlying `httpx` exception is caught directly).
+- `GeminiConnectionError` — a network failure prevented the request from
+  completing (`httpx.TransportError`, caught after the more specific
+  `TimeoutException`).
+- `GeminiResponseError` — the response contained no text content,
+  including a safety-filtered block (see above).
+
+### `check_health()`
+
+Issues a minimal real request (`max_output_tokens=1`) through the same
+client and error handling `invoke()` uses, reporting `healthy=False`
+with the failure's detail on `errors.APIError`/`httpx.TimeoutException`/
+`httpx.TransportError` rather than raising — the same live reachability
+check shape `ClaudeProvider.check_health()`/`OpenAIProvider.check_health()`
+already use.
+
+### Registration
+
+No bootstrap wiring is added — `GeminiProvider` is registered the same
+way any provider is, via the existing `ProviderFactory`/`ProviderRegistry`
+composition, or directly: `registry.register(GeminiProvider(configuration))`.
+See `tests/test_gemini_provider_integration.py` for the full
+`AIEngineBuilder -> AIEngine.execute() -> ExecutionEngine -> Dispatcher ->
+GeminiProvider -> ExecutionResult` flow, mirroring `OpenAIProvider`'s own
+Sprint 23 integration test.
+
 ## v1.0 contract ratification (Sprint 25)
 
 [ADR-0019](../adr/0019-release-readiness-and-scope-lock.md) classified
@@ -394,6 +524,9 @@ with real flags or documented as aspirational. Both are now decided,
 `config → core` precedent from Sprint 2. `core` has no dependency on
 `providers`. `providers` has no dependency on `config` or any other
 subsystem. `providers/claude.py` additionally depends on the optional
-`anthropic` package, and `providers/openai.py` additionally depends on
-the optional `openai` package — each the only file in this repository
-that imports its respective SDK, and neither depends on the other.
+`anthropic` package, `providers/openai.py` additionally depends on the
+optional `openai` package, and `providers/gemini.py` additionally
+depends on the optional `google-genai` package (which itself depends on
+`httpx`, already present transitively via `anthropic`/`openai`) — each
+the only file in this repository that imports its respective SDK, and
+none depends on either of the others.

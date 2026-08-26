@@ -237,7 +237,7 @@ order, not a recommendation:
 |---|---|---|
 | 27 | Persistent `MemoryStore` (`memory.SQLiteMemoryStore`) | Shipped — see [ADR-0021](../adr/0021-persistent-memory-sqlite-store.md) |
 | 28 | Concrete `SecretProvider` backend (`security.EnvSecretProvider`) | Shipped — see [ADR-0022](../adr/0022-env-secret-provider.md) |
-| 29 | Gemini provider | Approved, not started |
+| 29 | Gemini provider (`providers.gemini.GeminiProvider`) | Shipped — see [ADR-0023](../adr/0023-gemini-provider.md) |
 | 30 | Workflow evolution (dynamic steps / parallel / scheduling) | Approved, not started |
 | 31 | v1.1 Release Gate | Approved, not started |
 
@@ -266,3 +266,17 @@ environment variables, using only the Python standard library (`os`,
 added (`SecretNotFoundError`, `SecretValueError`,
 `SecretConfigurationError`), each a `SecurityError` subclass. See
 ADR-0022 and [`docs/specs/security.md`](../specs/security.md).
+
+Sprint 29 shipped `providers.gemini.GeminiProvider`, the kernel's third
+concrete provider — backed by the Gemini Developer API via the
+`google-genai` SDK (a new optional dependency, `pip install
+mellivor-kernel[gemini]`), added with zero change to `BaseProvider`,
+`ProviderCapabilities`, `ProviderConfiguration`, `ProviderHealthCheck`,
+`ProviderRegistry`, `ProviderFactory`, or the shared `providers`
+exceptions. Reuses `OpenAIProvider`'s request/response key names;
+translates Gemini's `.code`-based error model and `httpx`
+transport-level failures into the same five-class exception shape
+(`GeminiProviderError`/`GeminiAuthenticationError`/`GeminiTimeoutError`/
+`GeminiConnectionError`/`GeminiResponseError`) `ClaudeProvider`/
+`OpenAIProvider` already established. See ADR-0023 and
+[`docs/specs/providers.md`](../specs/providers.md).

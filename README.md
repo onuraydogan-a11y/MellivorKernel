@@ -114,11 +114,12 @@ pip install -e ".[dev]"
 pre-commit install
 ```
 
-Tests for `providers.claude.ClaudeProvider` and `providers.openai.OpenAIProvider`
-require their respective optional `anthropic`/`openai` packages; without
-them (plain `[dev]`) those test files skip cleanly rather than failing.
-Install `pip install -e ".[dev,anthropic,openai]"` to also exercise them
-(CI does this). Neither ever calls a live API — only real SDK types are
+Tests for `providers.claude.ClaudeProvider`, `providers.openai.OpenAIProvider`,
+and `providers.gemini.GeminiProvider` require their respective optional
+`anthropic`/`openai`/`google-genai` packages; without them (plain
+`[dev]`) those test files skip cleanly rather than failing. Install
+`pip install -e ".[dev,anthropic,openai,gemini]"` to also exercise them
+(CI does this). None ever calls a live API — only real SDK types are
 used, with a fake client injected in place of network I/O.
 
 ```bash
@@ -134,8 +135,8 @@ pull request against `main`, on Python 3.12 and 3.13.
 ## Status
 
 **Stable v1.0.0, v1.1 development underway.** Sprint 27 (persistent
-`MemoryStore`) and Sprint 28 (concrete `SecretProvider` backend) have
-shipped; see
+`MemoryStore`), Sprint 28 (concrete `SecretProvider` backend), and
+Sprint 29 (Gemini provider) have shipped; see
 [`docs/architecture/roadmap.md`](docs/architecture/roadmap.md) for the
 approved Sprint 27–31 sequence. The `1.0.0` compatibility promise below is
 unchanged — v1.1 sprints are additive, per
@@ -169,13 +170,16 @@ Implemented so far: `core` (exceptions, the
 `ServiceContainer` DI container, structured logging, and the `Kernel`
 runtime/lifecycle), `config` (`KernelConfig`, `Environment`, `load_config`),
 `providers` (the `BaseProvider` contract, `ProviderRegistry`,
-`ProviderFactory`, plus two concrete providers —
+`ProviderFactory`, plus three concrete providers —
 `providers.claude.ClaudeProvider`, backed by the Anthropic Messages API
-(optional, requires `pip install mellivor-kernel[anthropic]`), and
+(optional, requires `pip install mellivor-kernel[anthropic]`),
 `providers.openai.OpenAIProvider`, backed by the OpenAI Chat Completions
-API (optional, requires `pip install mellivor-kernel[openai]`); neither
-exported from `providers.__all__`, each importable explicitly from its
-own module; no Gemini/local-model integration yet), `tools` (the `BaseTool`
+API (optional, requires `pip install mellivor-kernel[openai]`), and
+`providers.gemini.GeminiProvider`, backed by the Gemini Developer API via
+the `google-genai` SDK (optional, requires `pip install
+mellivor-kernel[gemini]`); none exported from `providers.__all__`, each
+importable explicitly from its own module; no local-model integration
+yet), `tools` (the `BaseTool`
 contract, `ToolRegistry`, the permission model, and the
 `ToolExecutionPipeline`, plus three demonstration tools —
 `EchoTool`/`HealthCheckTool`/`VersionTool` — that call no external API),
