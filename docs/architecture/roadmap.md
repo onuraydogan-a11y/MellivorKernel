@@ -226,3 +226,32 @@ own Architecture Challenge before being scheduled:
 - Observability: a concrete metrics/tracing backend or vendor
   integration, and a trace/audit consumer built on top of `events`.
 - Security: authentication, OAuth, SSO, RBAC, encryption.
+
+## v1.1: approved sprint sequence (2026-08-26)
+
+Product Owner direction, superseding "classified, not scheduled" for the
+`Deferred to v1.1` bucket above — these five sprints are now the approved
+order, not a recommendation:
+
+| Sprint | Item | Status |
+|---|---|---|
+| 27 | Persistent `MemoryStore` (`memory.SQLiteMemoryStore`) | Shipped — see [ADR-0021](../adr/0021-persistent-memory-sqlite-store.md) |
+| 28 | Concrete `SecretProvider` backend | Approved, not started |
+| 29 | Gemini provider | Approved, not started |
+| 30 | Workflow evolution (dynamic steps / parallel / scheduling) | Approved, not started |
+| 31 | v1.1 Release Gate | Approved, not started |
+
+Sprints 28–31 are sequenced, not designed — each still requires its own
+ADR (where architecturally significant, per CLAUDE.md §8) and Phase-1
+architecture review before implementation begins, the same discipline
+Sprint 27 followed. Nothing about their eventual design is fixed by this
+table beyond the order and the one-line scope already named in the
+`Deferred to v1.1` classification above.
+
+Sprint 27 shipped `memory.SQLiteMemoryStore`, a second, durable
+`MemoryStore` implementation proving the existing abstraction beyond
+`InMemoryStore` — a SQLite-backed store using only the Python standard
+library, added with zero change to `MemoryStore`, `MemoryEntry`,
+`MemoryQuery`, `MemoryResult`, `MemoryError`, `InMemoryStore`, or
+`Memory`. See ADR-0021 and
+[`docs/specs/memory.md`](../specs/memory.md).

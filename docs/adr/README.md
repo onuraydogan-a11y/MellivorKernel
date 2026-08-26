@@ -50,3 +50,4 @@ Small, local, easily reversible choices do not need an ADR.
 | [0018](0018-ai-engine-foundation.md) | AI Engine Foundation | Accepted |
 | [0019](0019-release-readiness-and-scope-lock.md) | Release Readiness & Scope Lock | Accepted |
 | [0020](0020-release-decision-v1.0.md) | Release Decision: Mellivor Kernel v1.0.0 | Accepted |
+| [0021](0021-persistent-memory-sqlite-store.md) | Persistent memory: `SQLiteMemoryStore` | Accepted |

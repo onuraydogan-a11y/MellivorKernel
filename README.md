@@ -133,7 +133,14 @@ pull request against `main`, on Python 3.12 and 3.13.
 
 ## Status
 
-**Stable v1.0.0.** Per [ADR-0005](docs/adr/0005-versioning-strategy.md),
+**Stable v1.0.0, v1.1 development underway.** Sprint 27 (persistent
+`MemoryStore`) has shipped; see
+[`docs/architecture/roadmap.md`](docs/architecture/roadmap.md) for the
+approved Sprint 27–31 sequence. The `1.0.0` compatibility promise below is
+unchanged — v1.1 sprints are additive, per
+[ADR-0005](docs/adr/0005-versioning-strategy.md).
+
+Per [ADR-0005](docs/adr/0005-versioning-strategy.md),
 `1.0.0` is reserved for the explicit decision that every responsibility in
 ADR-0002 has a stable, documented contract. That decision is recorded in
 [ADR-0020](docs/adr/0020-release-decision-v1.0.md), following the scope
@@ -190,10 +197,13 @@ lifecycle events through it without depending on any concrete
 implementation; see
 [ADR-0008](docs/adr/0008-event-bus-and-lifecycle-events.md)), and `memory`
 (`Memory`, `MemoryStore`, `MemoryEntry`, `MemoryQuery`, `MemoryResult`,
-`InMemoryStore` — text-only memory as kernel infrastructure, with no
-dependency on any provider; `execution` may optionally record execution
-outcomes through it; see
-[ADR-0009](docs/adr/0009-memory-subsystem-and-execution-recording.md)),
+`InMemoryStore`, `SQLiteMemoryStore` — text-only memory as kernel
+infrastructure, with no dependency on any provider; two concrete
+`MemoryStore` backends, ephemeral (`InMemoryStore`) and durable/file-backed
+(`SQLiteMemoryStore`, standard-library `sqlite3`, no new dependency); execution
+may optionally record execution outcomes through either; see
+[ADR-0009](docs/adr/0009-memory-subsystem-and-execution-recording.md) and
+[ADR-0021](docs/adr/0021-persistent-memory-sqlite-store.md)),
 `workflow` (`Workflow`, `WorkflowDefinition`, `WorkflowStep`,
 `WorkflowContext`, `WorkflowEngine`, `WorkflowResult` — composes
 sequential multi-step runs by delegating every step to `ExecutionEngine`;

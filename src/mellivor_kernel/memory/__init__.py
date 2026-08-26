@@ -3,12 +3,13 @@
 Memory is kernel infrastructure, not an LLM feature: this package has no
 dependency on any provider, workflow, or agent concept, and never will --
 see ADR-0009. It supports plain text memory only: no embeddings, vector
-database, semantic search, RAG, or persistence. ``MemoryStore`` is a
-structural contract; ``InMemoryStore`` is its only concrete implementation
-today, and a future persistent or vector-backed implementation can replace
-it without any change to a consumer such as
+database, semantic search, RAG, or agent-specific memory. ``MemoryStore``
+is a structural contract with two concrete implementations today --
+``InMemoryStore`` (ephemeral, no persistence) and ``SQLiteMemoryStore``
+(durable, file-backed; see ADR-0021) -- either a drop-in replacement for
+the other from a consumer's point of view, such as
 :class:`~mellivor_kernel.execution.engine.ExecutionEngine`, which depends
-only on ``MemoryStore``, never on ``InMemoryStore``.
+only on ``MemoryStore``, never on a concrete backend.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from mellivor_kernel.memory.in_memory import InMemoryStore
 from mellivor_kernel.memory.memory import Memory
 from mellivor_kernel.memory.query import MemoryQuery
 from mellivor_kernel.memory.result import MemoryResult
+from mellivor_kernel.memory.sqlite_store import SQLiteMemoryStore
 from mellivor_kernel.memory.store import MemoryStore
 
 __all__ = [
@@ -29,4 +31,5 @@ __all__ = [
     "MemoryQuery",
     "MemoryResult",
     "MemoryStore",
+    "SQLiteMemoryStore",
 ]

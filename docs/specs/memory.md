@@ -1,6 +1,7 @@
 # `memory` subsystem spec
 
-Status: Implemented (Sprint 11).
+Status: Implemented (Sprint 11); second, persistent implementation added
+(Sprint 27).
 
 Public contract exported from `mellivor_kernel.memory`. Anything not
 listed here is internal and carries no compatibility guarantee, per
@@ -91,10 +92,56 @@ Protocol, never on `InMemoryStore` concretely — the same seam pattern
 
 ## `InMemoryStore`
 
-The only concrete `MemoryStore` implementation this sprint adds: a plain
+The first concrete `MemoryStore` implementation (Sprint 11): a plain
 `dict[str, MemoryEntry]` keyed by `id`. Not persistence — entries do not
 survive process restart. `search()` performs a single linear scan
 applying every set `MemoryQuery` filter; no index, no embeddings.
+
+## `SQLiteMemoryStore`
+
+The second concrete `MemoryStore` implementation (Sprint 27) — durable,
+backed by a single SQLite database file, using only the Python standard
+library (`sqlite3`): no new dependency, mandatory or optional. See
+[ADR-0021](../adr/0021-persistent-memory-sqlite-store.md) for the full
+design rationale.
+
+```python
+def __init__(self, path: str | Path) -> None
+```
+
+`path` is required — there is no default location; storage ownership
+stays with the caller, per [ADR-0004](../adr/0004-public-api-philosophy.md)'s
+"no implicit global state." The parent directory must already exist.
+
+Same five-method contract, same behavior as `InMemoryStore` for every
+case the Protocol specifies, including overwrite semantics (`add()`ing an
+existing `id` updates it in place, preserving its original position in
+`search()` results — not a delete-and-reinsert). One backend-specific
+constraint beyond the Protocol: `tags` and `metadata` values must be
+JSON-serializable; a non-serializable `metadata` value raises
+`MemoryError` from `add()`.
+
+Every other `sqlite3`-level failure (a corrupt or non-SQLite file at
+`path`, a missing parent directory, any I/O error) is translated to
+`MemoryError` at the point it occurs — never a raw `sqlite3` exception
+across the public boundary, per ADR-0004. Opening an existing, corrupt
+file fails immediately from `__init__` (fail-fast; the store never
+silently treats corruption as an empty store).
+
+Not safe to share across threads without external synchronization (the
+same limitation `InMemoryStore` has as an unlocked `dict`). Safe for
+multiple processes to open the same file concurrently — SQLite's own
+file-level locking (WAL journal mode) governs that access; no
+kernel-level locking is added on top.
+
+Additive beyond the `MemoryStore` Protocol: `close()` and context-manager
+support (`__enter__`/`__exit__`) for deterministic release of the file
+handle. Neither is required — the OS reclaims the handle at process exit.
+
+No encryption at rest and no access control beyond OS filesystem
+permissions on `path` — consistent with `security`/`observability`'s
+"bring your own backend" posture; encryption at rest remains `Future
+research` per ADR-0019.
 
 ## `Memory`
 
@@ -156,9 +203,11 @@ See `docs/specs/execution.md` for `ExecutionEngine`'s full contract.
 execution → memory
 ```
 
-`memory` depends only on `core` (`KernelError`) — **no dependency on
-`providers`, `execution`, `authorization`, `events`, or `tools`**, and
-none is ever planned; see ADR-0009 for why this direction is fixed
-permanently, not just a starting point. `execution` depends on `memory`
-(`MemoryEntry`, `MemoryStore`) the same way it already depends on `events`
-(`Event`, `EventBus`).
+`memory` depends only on `core` (`KernelError`) plus, for
+`SQLiteMemoryStore`, the Python standard library (`sqlite3`, `json`,
+`pathlib`, `datetime`) — no third-party dependency, mandatory or
+optional. **No dependency on `providers`, `execution`, `authorization`,
+`events`, or `tools`**, and none is ever planned; see ADR-0009 for why
+this direction is fixed permanently, not just a starting point.
+`execution` depends on `memory` (`MemoryEntry`, `MemoryStore`) the same
+way it already depends on `events` (`Event`, `EventBus`).
