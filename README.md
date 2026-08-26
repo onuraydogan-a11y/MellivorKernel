@@ -134,7 +134,8 @@ pull request against `main`, on Python 3.12 and 3.13.
 ## Status
 
 **Stable v1.0.0, v1.1 development underway.** Sprint 27 (persistent
-`MemoryStore`) has shipped; see
+`MemoryStore`) and Sprint 28 (concrete `SecretProvider` backend) have
+shipped; see
 [`docs/architecture/roadmap.md`](docs/architecture/roadmap.md) for the
 approved Sprint 27–31 sequence. The `1.0.0` compatibility promise below is
 unchanged — v1.1 sprints are additive, per
@@ -221,9 +222,13 @@ see [`docs/specs/`](docs/specs/README.md) for their public contracts.
 Four further foundation-only packages are also implemented: `security`
 (`Secret`, `SecretProvider`, `SecretProviderRegistry`, `SecurityPolicy`,
 `SecurityDecision`, `SecureConfiguration`, `AuditRecord`, `AuditSink` —
-reusable security contracts and primitives, depending only on `core`; no
-concrete secret backend, authentication, OAuth, SSO, RBAC, or encryption;
-see [ADR-0012](docs/adr/0012-security-foundation.md)), `observability`
+reusable security contracts and primitives, depending only on `core`;
+plus, as of Sprint 28, a first concrete `SecretProvider` backend,
+`EnvSecretProvider` — read-only, process-environment-backed, standard
+library only, no new dependency; still no authentication, OAuth, SSO,
+RBAC, or encryption; see
+[ADR-0012](docs/adr/0012-security-foundation.md) and
+[ADR-0022](docs/adr/0022-env-secret-provider.md)), `observability`
 (`ObservationContext`, `MetricsRecorder`, `TraceRecorder`/`TraceSpan`,
 `StructuredEventSink`/`StructuredObservationEvent`, no-op default
 implementations, and the `Observability` DI wrapper — depending on no

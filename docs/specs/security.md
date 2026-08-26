@@ -1,6 +1,7 @@
 # `security` subsystem spec
 
-Status: Foundation (Sprint 15)
+Status: Foundation (Sprint 15); first concrete `SecretProvider` backend
+added (Sprint 28).
 
 Public contract exported from `mellivor_kernel.security`. Anything not
 listed here is internal and carries no compatibility guarantee, per
@@ -42,7 +43,49 @@ kernel remains agnostic to how a secret is stored.
 
 A tiny registry that resolves secrets through a list of registered providers.
 This is intentionally small and dependency-injected: a consumer composes the
-registry explicitly and resolves a secret only when needed.
+registry explicitly and resolves a secret only when needed. `resolve()`
+tries each registered provider in order, catching `SecurityError` and
+continuing to the next; every concrete `SecretProvider` must raise a
+`SecurityError` subclass (never return `None` or raise a non-kernel
+exception) for this fallback chaining to work.
+
+### `EnvSecretProvider`
+
+The first concrete `SecretProvider` implementation (Sprint 28) — read-only,
+backed by the calling process's own environment variables, using only the
+Python standard library (`os`, `re`): no new dependency, mandatory or
+optional. See [ADR-0022](../adr/0022-env-secret-provider.md) for the full
+design rationale.
+
+```python
+def __init__(self, prefix: str = "") -> None
+def resolve(self, name: str) -> Secret
+```
+
+`prefix` is optional and defaults to no prefix (`name` is looked up
+verbatim in `os.environ`); when set, every lookup uses
+`os.environ[f"{prefix}{name}"]`. No caching — every `resolve()` call reads
+the live environment, and no resolved value is retained on the instance.
+Safe to call concurrently from multiple threads (no mutable instance state
+beyond the immutable `prefix`).
+
+Three distinct failure modes, each with its own exception type (all
+`SecurityError` subclasses, added in this sprint):
+
+- **`SecretNotFoundError`** — no environment variable with the resolved
+  key is set.
+- **`SecretValueError`** — the environment variable is set but its value
+  fails `Secret`'s own validation (for example, empty).
+- **`SecretConfigurationError`** — the lookup request itself is invalid: a
+  blank `name`, or a `name`/`prefix` combination that does not resolve to
+  a valid environment-variable identifier.
+
+No exception message this provider raises ever includes the resolved
+secret value — only the secret's `name` or the computed environment
+variable key. No logging statements exist in this module, eliminating the
+redact-in-logs risk surface entirely. No encryption at rest, no secret
+rotation, and no built-in audit trail — see ADR-0022's "Security
+limitations" for the full, explicit list.
 
 ### `SecurityPolicy`
 
@@ -75,6 +118,17 @@ choose one for them.
 `security.exceptions.SecurityError` is the base class for every security
 exception in the subsystem. `SecureConfigurationError` is the dedicated error
 raised for invalid secure-configuration lookup or validation behavior.
+
+Added in Sprint 28, backend-agnostic (any current or future concrete
+`SecretProvider` may raise them, not only `EnvSecretProvider`):
+
+- `SecretNotFoundError` — a requested secret does not exist in the
+  provider's source.
+- `SecretValueError` — a secret's resolved value fails validation.
+- `SecretConfigurationError` — a secret lookup request is itself invalid,
+  independent of whether the secret exists.
+
+All three subclass `SecurityError`.
 
 ## Architectural rule
 

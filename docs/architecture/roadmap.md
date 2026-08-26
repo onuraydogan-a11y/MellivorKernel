@@ -236,7 +236,7 @@ order, not a recommendation:
 | Sprint | Item | Status |
 |---|---|---|
 | 27 | Persistent `MemoryStore` (`memory.SQLiteMemoryStore`) | Shipped — see [ADR-0021](../adr/0021-persistent-memory-sqlite-store.md) |
-| 28 | Concrete `SecretProvider` backend | Approved, not started |
+| 28 | Concrete `SecretProvider` backend (`security.EnvSecretProvider`) | Shipped — see [ADR-0022](../adr/0022-env-secret-provider.md) |
 | 29 | Gemini provider | Approved, not started |
 | 30 | Workflow evolution (dynamic steps / parallel / scheduling) | Approved, not started |
 | 31 | v1.1 Release Gate | Approved, not started |
@@ -255,3 +255,14 @@ library, added with zero change to `MemoryStore`, `MemoryEntry`,
 `MemoryQuery`, `MemoryResult`, `MemoryError`, `InMemoryStore`, or
 `Memory`. See ADR-0021 and
 [`docs/specs/memory.md`](../specs/memory.md).
+
+Sprint 28 shipped `security.EnvSecretProvider`, the first concrete
+`SecretProvider` implementation — read-only, backed by process
+environment variables, using only the Python standard library (`os`,
+`re`), added with zero change to `SecretProvider`, `Secret`,
+`SecretProviderRegistry`, `SecurityPolicy`, `SecureConfiguration`,
+`SecurityDecision`, `AuditRecord`, `AuditSink`, `SecurityError`, or
+`SecureConfigurationError`. Three new, backend-agnostic exceptions were
+added (`SecretNotFoundError`, `SecretValueError`,
+`SecretConfigurationError`), each a `SecurityError` subclass. See
+ADR-0022 and [`docs/specs/security.md`](../specs/security.md).
