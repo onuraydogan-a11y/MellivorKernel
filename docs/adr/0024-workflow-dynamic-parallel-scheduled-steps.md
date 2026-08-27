@@ -1,7 +1,13 @@
 # 0024. Workflow evolution: dynamic steps, parallel execution, scheduling
 
-Status: Accepted
+Status: Superseded by [ADR-0025](0025-workflow-execution-options-compatibility-repair.md)
 Date: 2026-08-26
+
+> **Compatibility correction:** The Sprint 31 release audit rejected this
+> ADR's direct additions to the frozen `WorkflowStep` dataclass as breaking
+> under ADR-0005. ADR-0025 restores the v1.0 surface and relocates dynamic,
+> parallel, and scheduling configuration to additive execution options. This
+> document remains the historical record of the original Sprint 30 decision.
 
 ## Context
 

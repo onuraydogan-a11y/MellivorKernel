@@ -8,8 +8,8 @@ listed here is internal and carries no compatibility guarantee, per
 [ADR-0010](../adr/0010-workflow-engine-and-orchestration-boundary.md) for
 why this subsystem exists and the orchestration/execution boundary it
 fixes permanently, and
-[ADR-0024](../adr/0024-workflow-dynamic-parallel-scheduled-steps.md) for
-dynamic requests, opt-in parallel groups, and scheduling guards.
+[ADR-0025](../adr/0025-workflow-execution-options-compatibility-repair.md)
+for the additive dynamic-request, opt-in parallel, and scheduling surface.
 
 ## Exceptions
 
@@ -26,23 +26,14 @@ An immutable (`frozen=True, slots=True`) dataclass — one step:
 
 ```python
 name: str
-request: ExecutionRequest | None = None
+request: ExecutionRequest
 granted_permissions: frozenset[str] = field(default_factory=frozenset)
 continue_on_failure: bool = False
-request_factory: Callable[[WorkflowContext], ExecutionRequest] | None = None
-parallel_group: str | None = None
-not_before: datetime | None = None
 ```
 
-Exactly one of `request` and `request_factory` must be set. Static requests
-retain their v1.0 meaning. A dynamic factory is called once with accumulated
-prior results; no expression language, string evaluation, retry, or speculative
-call is involved. Resolver exceptions and invalid return types become ordinary
-failed `ExecutionResult` values with `metadata["stage"] == "dynamic_request"`.
-
-`parallel_group` explicitly opts contiguous siblings into concurrency; `None`
-preserves sequential execution. `not_before` is an optional timezone-aware
-eligibility guard. Blank group names and naive datetimes are invalid.
+This is exactly the v1.0 public dataclass: field order, constructor defaults,
+annotations, repr/equality/hash participation, and `asdict()` shape are
+unchanged. Sprint 30 execution metadata is deliberately not stored here.
 
 A step never executes anything itself. Every resolved `ExecutionRequest`
 delegates to `ExecutionEngine.execute()`.
@@ -61,8 +52,32 @@ metadata: Mapping[str, object] = field(default_factory=dict)
 
 `steps` may be empty. `__post_init__` rejects a blank `name` and rejects
 duplicate step names (they would silently collide as keys in
-`WorkflowResult.step_results`). It also rejects a group name reused in
-non-contiguous positions. All validation failures raise `WorkflowError`.
+`WorkflowResult.step_results`). All validation failures raise `WorkflowError`.
+
+## `WorkflowExecutionOptions`
+
+An additive immutable (`frozen=True, slots=True`) value applied to a single
+run, without changing `WorkflowStep` or `WorkflowDefinition`:
+
+```python
+request_resolvers: Mapping[str, RequestResolver] = field(default_factory=dict)
+parallel_groups: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
+not_before: Mapping[str, datetime] = field(default_factory=dict)
+
+RequestResolver = Callable[[WorkflowContext, ExecutionRequest], ExecutionRequest]
+```
+
+Keys are existing, unique step names. Unknown or blank names are rejected.
+Parallel group members must be unique, contiguous, and in declared workflow
+order. `not_before` values must be timezone-aware. The engine snapshots the
+supplied mappings before execution, so later caller mutation cannot change an
+in-progress run.
+
+A resolver is called once with accumulated prior results and the step's
+required original request. It returns the request to execute. There is no
+expression language, string/code evaluation, retry, or speculative call.
+Resolver exceptions and invalid return types become ordinary failed
+`ExecutionResult` values with `metadata["stage"] == "dynamic_request"`.
 
 ## `Workflow`
 
@@ -92,8 +107,8 @@ step_results: Mapping[str, ExecutionResult] = field(default_factory=dict)
 step, identical throughout the run. `step_results` holds every step's
 outcome completed so far; `WorkflowEngine` threads a *new*
 `WorkflowContext` (immutable replace, never mutation) with this extended
-after each step — this is what makes the context "shared." A step's own
-dynamic request factories now read earlier results from this accumulated
+after each step — this is what makes the context "shared." A configured
+request resolver reads earlier results from this accumulated
 snapshot. Siblings in a parallel group receive the identical pre-group
 snapshot; the group is folded into a fresh context in declared order before
 the next unit begins.
@@ -150,7 +165,13 @@ def __init__(
     clock: Clock | None = None,
 ) -> None
 
-def run(self, workflow: Workflow, context: WorkflowContext) -> WorkflowResult
+def run(
+    self,
+    workflow: Workflow,
+    context: WorkflowContext,
+    *,
+    options: WorkflowExecutionOptions | None = None,
+) -> WorkflowResult
 ```
 
 All infrastructure is received via dependency injection — `WorkflowEngine`
@@ -158,9 +179,10 @@ never constructs an `ExecutionEngine`, a memory backend, or an event bus
 itself.
 
 - Logs the start of the run and publishes `WorkflowStarted`.
-- Iterates ordered execution units. Ungrouped steps run inline exactly as in
-  v1.0. Contiguous steps sharing an explicit `parallel_group` run in a thread
-  pool scoped to that group. `max_concurrency`, when set, bounds workers.
+- Iterates ordered execution units. Steps run inline exactly as in v1.0 unless
+  named in an options `parallel_groups` entry. A configured contiguous group
+  runs in a thread pool scoped to that group. `max_concurrency`, when set,
+  bounds workers.
   For each resolved request, calls
   `execution_engine.execute(resolved_request, context.execution_context, granted_permissions=step.granted_permissions)`.
   `WorkflowEngine` never touches a tool or provider, `Dispatcher`, or
@@ -189,7 +211,7 @@ constructed with only `execution_engine`.
 
 ### Dynamic, parallel, and failure semantics
 
-Dependencies are expressed by sequence boundaries: a dynamic step reads only
+Dependencies are expressed by sequence boundaries: a resolver reads only
 completed earlier units, while siblings in a group are independent. The first
 normal stopping failure in declared order determines `stopped_at`. Cancellation
 of queued siblings is best-effort; already running work completes. One
@@ -205,8 +227,9 @@ dependencies, isolate them per thread, or keep those workflows sequential.
 ### Scheduling semantics and limitations
 
 `Clock` is the public time-source protocol; `SystemClock` returns aware UTC
-time. When `clock.now() < step.not_before`, request construction and execution
-do not occur, and the step fails with `metadata["stage"] == "scheduling"`.
+time. When `clock.now()` is earlier than a step's options `not_before` value,
+request construction and execution do not occur, and the step fails with
+`metadata["stage"] == "scheduling"`.
 At or after the timestamp it executes immediately. Tests can inject a fake
 clock.
 
@@ -217,11 +240,12 @@ provide cron, or wake itself after restart. An external runtime invokes
 
 ### Backward compatibility guarantee
 
-All v1.0 workflow types remain present and frozen. Existing static constructors
-and `WorkflowEngine.run()` calls need no changes. New step fields default to
-inactive, new engine arguments are keyword-only and optional, and static
-ungrouped workflows retain identical ordering, context, failure, event, memory,
-and return-value behavior.
+All v1.0 workflow types remain present and frozen. `WorkflowStep` and
+`WorkflowDefinition` retain their exact v1.0 public dataclass shapes. Existing
+constructors and two-argument `WorkflowEngine.run()` calls need no changes.
+New engine arguments are keyword-only and optional; with `options=None`, static
+workflows retain identical ordering, context, failure, event, memory, and
+return-value behavior.
 
 ## Dependency relationship
 

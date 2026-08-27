@@ -53,4 +53,5 @@ Small, local, easily reversible choices do not need an ADR.
 | [0021](0021-persistent-memory-sqlite-store.md) | Persistent memory: `SQLiteMemoryStore` | Accepted |
 | [0022](0022-env-secret-provider.md) | Concrete `SecretProvider` backend: `EnvSecretProvider` | Accepted |
 | [0023](0023-gemini-provider.md) | Third concrete provider: `GeminiProvider` | Accepted |
-| [0024](0024-workflow-dynamic-parallel-scheduled-steps.md) | Workflow evolution: dynamic steps, parallel execution, scheduling | Accepted |
+| [0024](0024-workflow-dynamic-parallel-scheduled-steps.md) | Workflow evolution: dynamic steps, parallel execution, scheduling | Superseded by ADR-0025 |
+| [0025](0025-workflow-execution-options-compatibility-repair.md) | Preserve WorkflowStep v1.0 through external execution options | Accepted |

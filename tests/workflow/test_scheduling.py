@@ -25,6 +25,7 @@ from mellivor_kernel.workflow import (
     WorkflowDefinition,
     WorkflowEngine,
     WorkflowError,
+    WorkflowExecutionOptions,
     WorkflowResult,
     WorkflowStep,
 )
@@ -73,7 +74,7 @@ def _context() -> WorkflowContext:
     )
 
 
-def _step(*, not_before: datetime | None = None) -> WorkflowStep:
+def _step() -> WorkflowStep:
     return WorkflowStep(
         name="scheduled",
         request=ExecutionRequest(
@@ -81,13 +82,21 @@ def _step(*, not_before: datetime | None = None) -> WorkflowStep:
             operation="echo",
             payload={"executed": True},
         ),
-        not_before=not_before,
     )
 
 
-def _run(engine: WorkflowEngine, step: WorkflowStep) -> WorkflowResult:
+def _run(
+    engine: WorkflowEngine, step: WorkflowStep, *, not_before: datetime | None = None
+) -> WorkflowResult:
+    options = (
+        WorkflowExecutionOptions(not_before={step.name: not_before})
+        if not_before is not None
+        else None
+    )
     return engine.run(
-        Workflow(definition=WorkflowDefinition(name="schedule", steps=(step,))), _context()
+        Workflow(definition=WorkflowDefinition(name="schedule", steps=(step,))),
+        _context(),
+        options=options,
     )
 
 
@@ -106,7 +115,8 @@ def test_future_step_fails_without_sleeping_or_invoking_execution() -> None:
 
     result = _run(
         WorkflowEngine(execution_engine, clock=_FakeClock(now)),
-        _step(not_before=now + timedelta(seconds=1)),
+        _step(),
+        not_before=now + timedelta(seconds=1),
     )
 
     assert result.success is False
@@ -119,7 +129,7 @@ def test_step_executes_when_injected_clock_reaches_not_before() -> None:
     due = datetime(2030, 1, 1, tzinfo=UTC)
     execution_engine = _CountingExecutionEngine()
 
-    result = _run(WorkflowEngine(execution_engine, clock=_FakeClock(due)), _step(not_before=due))
+    result = _run(WorkflowEngine(execution_engine, clock=_FakeClock(due)), _step(), not_before=due)
 
     assert result.success is True
     assert execution_engine.calls == 1
@@ -131,7 +141,8 @@ def test_past_schedule_executes_immediately() -> None:
 
     result = _run(
         WorkflowEngine(execution_engine, clock=_FakeClock(now)),
-        _step(not_before=now - timedelta(days=1)),
+        _step(),
+        not_before=now - timedelta(days=1),
     )
 
     assert result.success is True
@@ -140,7 +151,7 @@ def test_past_schedule_executes_immediately() -> None:
 
 def test_naive_not_before_is_rejected() -> None:
     with pytest.raises(WorkflowError, match="timezone-aware"):
-        _step(not_before=datetime(2030, 1, 1))
+        WorkflowExecutionOptions(not_before={"scheduled": datetime(2030, 1, 1)})
 
 
 def test_advancing_fake_clock_makes_a_new_run_eligible_without_background_work() -> None:
@@ -148,11 +159,12 @@ def test_advancing_fake_clock_makes_a_new_run_eligible_without_background_work()
     clock = _FakeClock(now)
     execution_engine = _CountingExecutionEngine()
     workflow_engine = WorkflowEngine(execution_engine, clock=clock)
-    step = _step(not_before=now + timedelta(minutes=1))
+    step = _step()
+    scheduled_at = now + timedelta(minutes=1)
 
-    first = _run(workflow_engine, step)
+    first = _run(workflow_engine, step, not_before=scheduled_at)
     clock.current += timedelta(minutes=1)
-    second = _run(workflow_engine, step)
+    second = _run(workflow_engine, step, not_before=scheduled_at)
 
     assert first.success is False
     assert second.success is True

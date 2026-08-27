@@ -36,10 +36,67 @@ from mellivor_kernel.workflow import (
     Workflow,
     WorkflowContext,
     WorkflowDefinition,
-    WorkflowEngine,
     WorkflowError,
+    WorkflowExecutionOptions,
+    WorkflowResult,
     WorkflowStep,
 )
+from mellivor_kernel.workflow import WorkflowEngine as _BaseWorkflowEngine
+
+_STEP_OPTIONS: dict[
+    str, tuple[str | None, Callable[[WorkflowContext, ExecutionRequest], ExecutionRequest] | None]
+] = {}
+
+
+def _evolved_step(
+    *,
+    name: str,
+    request: ExecutionRequest | None = None,
+    granted_permissions: frozenset[str] = frozenset(),
+    continue_on_failure: bool = False,
+    request_factory: Callable[[WorkflowContext], ExecutionRequest] | None = None,
+    parallel_group: str | None = None,
+) -> WorkflowStep:
+    """Test adapter from ADR-0024's rejected prototype to ADR-0025 options."""
+    base_request = request or ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
+    step = WorkflowStep(
+        name=name,
+        request=base_request,
+        granted_permissions=granted_permissions,
+        continue_on_failure=continue_on_failure,
+    )
+    resolver: Callable[[WorkflowContext, ExecutionRequest], ExecutionRequest] | None = None
+    if request_factory is not None:
+
+        def resolve(context: WorkflowContext, original: ExecutionRequest) -> ExecutionRequest:
+            return request_factory(context)
+
+        resolver = resolve
+    _STEP_OPTIONS[base_request.request_id] = (parallel_group, resolver)
+    return step
+
+
+class WorkflowEngine(_BaseWorkflowEngine):
+    def run(
+        self,
+        workflow: Workflow,
+        context: WorkflowContext,
+        *,
+        options: WorkflowExecutionOptions | None = None,
+    ) -> WorkflowResult:
+        resolvers = {}
+        groups_by_label: dict[str, list[str]] = {}
+        for step in workflow.definition.steps:
+            group, resolver = _STEP_OPTIONS.get(step.request.request_id, (None, None))
+            if resolver is not None:
+                resolvers[step.name] = resolver
+            if group is not None:
+                groups_by_label.setdefault(group, []).append(step.name)
+        derived_options = WorkflowExecutionOptions(
+            request_resolvers=resolvers,
+            parallel_groups=tuple(tuple(group) for group in groups_by_label.values()),
+        )
+        return super().run(workflow, context, options=options or derived_options)
 
 
 @dataclass
@@ -153,7 +210,7 @@ def _make_execution_engine(*extra_tools: BaseTool) -> ExecutionEngine:
 def _echo_step(
     name: str, *, payload: Mapping[str, object] | None = None, **kwargs: object
 ) -> WorkflowStep:
-    return WorkflowStep(
+    return _evolved_step(
         name=name,
         request=ExecutionRequest(
             target=ExecutionTarget.TOOL, operation="echo", payload=payload or {}
@@ -163,7 +220,7 @@ def _echo_step(
 
 
 def _counting_step(name: str, tag: str, **kwargs: object) -> WorkflowStep:
-    return WorkflowStep(
+    return _evolved_step(
         name=name,
         request=ExecutionRequest(
             target=ExecutionTarget.TOOL, operation="count-concurrency", payload={"tag": tag}
@@ -175,28 +232,34 @@ def _counting_step(name: str, tag: str, **kwargs: object) -> WorkflowStep:
 # -- construction / grouping -----------------------------------------------------
 
 
-def test_definition_rejects_non_contiguous_parallel_group() -> None:
+def test_options_reject_non_contiguous_parallel_group() -> None:
+    definition = WorkflowDefinition(
+        name="split-group",
+        steps=(_echo_step("a"), _echo_step("b"), _echo_step("c")),
+    )
     with pytest.raises(WorkflowError):
-        WorkflowDefinition(
-            name="split-group",
-            steps=(
-                _echo_step("a", parallel_group="g"),
-                _echo_step("b"),
-                _echo_step("c", parallel_group="g"),
-            ),
+        _BaseWorkflowEngine(_make_execution_engine()).run(
+            Workflow(definition=definition),
+            _make_context(),
+            options=WorkflowExecutionOptions(parallel_groups=(("a", "c"),)),
         )
 
 
-def test_definition_accepts_contiguous_parallel_group() -> None:
+def test_options_accept_contiguous_parallel_group() -> None:
     definition = WorkflowDefinition(
         name="ok-group",
         steps=(
-            _echo_step("a", parallel_group="g"),
-            _echo_step("b", parallel_group="g"),
+            _echo_step("a"),
+            _echo_step("b"),
             _echo_step("c"),
         ),
     )
-    assert len(definition.steps) == 3
+    result = _BaseWorkflowEngine(_make_execution_engine()).run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(parallel_groups=(("a", "b"),)),
+    )
+    assert result.success is True
 
 
 def test_engine_rejects_non_positive_max_concurrency() -> None:
@@ -247,7 +310,7 @@ def test_ungrouped_workflow_never_uses_a_worker_thread() -> None:
     definition = WorkflowDefinition(
         name="inline",
         steps=(
-            WorkflowStep(
+            _evolved_step(
                 name="a",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="record-thread"),
             ),
@@ -375,12 +438,12 @@ def test_step_after_a_group_never_starts_before_the_group_finishes() -> None:
     definition = WorkflowDefinition(
         name="ordered",
         steps=(
-            WorkflowStep(
+            _evolved_step(
                 name="a",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="sets-event"),
                 parallel_group="g",
             ),
-            WorkflowStep(
+            _evolved_step(
                 name="after",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="checks-event"),
             ),
@@ -471,12 +534,12 @@ def test_group_result_ordering_matches_declared_order_regardless_of_completion_o
     definition = WorkflowDefinition(
         name="ordering",
         steps=(
-            WorkflowStep(
+            _evolved_step(
                 name="slow-first",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="waits"),
                 parallel_group="g",
             ),
-            WorkflowStep(
+            _evolved_step(
                 name="fast-second",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="signals"),
                 parallel_group="g",
@@ -499,7 +562,7 @@ def test_one_failing_branch_stops_the_workflow_by_default() -> None:
         name="one-fails",
         steps=(
             _echo_step("ok", parallel_group="g"),
-            WorkflowStep(
+            _evolved_step(
                 name="bad",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="always-fails"),
                 parallel_group="g",
@@ -520,7 +583,7 @@ def test_one_failing_branch_with_continue_on_failure_lets_the_workflow_finish() 
         name="one-fails-tolerant",
         steps=(
             _echo_step("ok", parallel_group="g"),
-            WorkflowStep(
+            _evolved_step(
                 name="bad",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="always-fails"),
                 parallel_group="g",
@@ -544,12 +607,12 @@ def test_multiple_failing_branches_report_the_first_declared_as_stopped_at() -> 
     definition = WorkflowDefinition(
         name="multi-fail",
         steps=(
-            WorkflowStep(
+            _evolved_step(
                 name="bad-1",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="always-fails"),
                 parallel_group="g",
             ),
-            WorkflowStep(
+            _evolved_step(
                 name="bad-2",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="always-fails"),
                 parallel_group="g",
@@ -581,12 +644,12 @@ def test_multiple_raising_branches_raise_an_exception_group() -> None:
     definition = WorkflowDefinition(
         name="raising-group",
         steps=(
-            WorkflowStep(
+            _evolved_step(
                 name="a",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="boom-1"),
                 parallel_group="g",
             ),
-            WorkflowStep(
+            _evolved_step(
                 name="b",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="boom-2"),
                 parallel_group="g",
@@ -624,12 +687,12 @@ def test_multiple_raising_branches_are_reported_in_declared_order() -> None:
     definition = WorkflowDefinition(
         name="ordered-errors",
         steps=(
-            WorkflowStep(
+            _evolved_step(
                 name="first",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="first-declared"),
                 parallel_group="g",
             ),
-            WorkflowStep(
+            _evolved_step(
                 name="second",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="second-declared"),
                 parallel_group="g",
@@ -666,7 +729,7 @@ def test_single_raising_branch_re_raises_the_original_exception() -> None:
     definition = WorkflowDefinition(
         name="single-raise",
         steps=(
-            WorkflowStep(
+            _evolved_step(
                 name="a",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="boom"),
                 parallel_group="g",
@@ -710,7 +773,7 @@ def test_stopping_failure_attempts_to_cancel_every_other_sibling_future() -> Non
     definition = WorkflowDefinition(
         name="cancel-attempt",
         steps=(
-            WorkflowStep(
+            _evolved_step(
                 name="a",
                 request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="always-fails"),
                 parallel_group="g",
@@ -746,8 +809,8 @@ def test_siblings_in_a_group_see_the_same_pre_group_context_not_each_other() -> 
         name="isolation",
         steps=(
             _echo_step("before", payload={"n": 0}),
-            WorkflowStep(name="a", request_factory=make_recorder("a"), parallel_group="g"),
-            WorkflowStep(name="b", request_factory=make_recorder("b"), parallel_group="g"),
+            _evolved_step(name="a", request_factory=make_recorder("a"), parallel_group="g"),
+            _evolved_step(name="b", request_factory=make_recorder("b"), parallel_group="g"),
         ),
     )
 

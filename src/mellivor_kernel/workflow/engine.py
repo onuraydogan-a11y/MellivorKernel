@@ -1,12 +1,11 @@
 """WorkflowEngine: orchestrates execution of a workflow's steps.
 
 Steps run strictly in the order their execution *units* appear in
-``definition.steps`` -- a unit is either a single, ungrouped step (run
-inline, in the calling thread, exactly as before Sprint 30) or a
-contiguous run of steps sharing the same
-:attr:`~mellivor_kernel.workflow.step.WorkflowStep.parallel_group` (run
-concurrently, via a `ThreadPoolExecutor` scoped to that one unit). See
-`ADR-0024 <../../docs/adr/0024-workflow-dynamic-parallel-scheduled-steps.md>`_
+``definition.steps`` -- a unit is either a single step (run inline, in the
+calling thread, exactly as in v1.0) or a contiguous group named by additive
+``WorkflowExecutionOptions`` (run concurrently via a ``ThreadPoolExecutor``
+scoped to that one unit). See
+`ADR-0025 <../../docs/adr/0025-workflow-execution-options-compatibility-repair.md>`_
 for the full design: dynamic request construction, parallel execution,
 and scheduling guards.
 """
@@ -25,6 +24,7 @@ from mellivor_kernel.workflow.clock import Clock, SystemClock
 from mellivor_kernel.workflow.context import WorkflowContext
 from mellivor_kernel.workflow.events import WorkflowCompleted, WorkflowFailed, WorkflowStarted
 from mellivor_kernel.workflow.exceptions import WorkflowError
+from mellivor_kernel.workflow.options import WorkflowExecutionOptions
 from mellivor_kernel.workflow.result import WorkflowResult
 from mellivor_kernel.workflow.step import WorkflowStep
 from mellivor_kernel.workflow.workflow import Workflow
@@ -42,11 +42,9 @@ class WorkflowEngine:
     event publication, memory recording at the execution level).
 
     Steps run strictly in the order their execution units appear in
-    ``definition.steps``. A step whose
-    :attr:`~mellivor_kernel.workflow.step.WorkflowStep.parallel_group` is
-    unset (the default) runs on its own, inline, in the calling thread --
-    no concurrency is introduced unless a workflow explicitly opts in via
-    ``parallel_group``. A step's failure stops the workflow unless that
+    ``definition.steps``. A step runs on its own, inline, in the calling
+    thread unless the caller explicitly names it in an execution option's
+    parallel group. A step's failure stops the workflow unless that
     step sets :attr:`~mellivor_kernel.workflow.step.WorkflowStep.continue_on_failure`.
     """
 
@@ -78,12 +76,12 @@ class WorkflowEngine:
                 within any one parallel unit. ``None`` (the default)
                 means unbounded -- every step in a unit is submitted at
                 once. Has no effect on ungrouped steps, which never use a
-                thread pool. See ADR-0024's "Thread/async safety
-                assumptions" before combining this with a shared,
-                non-thread-safe ``MemoryStore`` (for example
-                ``SQLiteMemoryStore``) on ``execution_engine``.
-            clock: The time source :attr:`~mellivor_kernel.workflow.step.WorkflowStep.not_before`
-                is evaluated against. A real :class:`~mellivor_kernel.workflow.clock.SystemClock`
+                thread pool. See ADR-0025's documented parallelism
+                limitation before combining this with a shared, non-thread-safe
+                ``MemoryStore`` (for example ``SQLiteMemoryStore``) on
+                ``execution_engine``.
+            clock: The time source execution-option ``not_before`` values
+                are evaluated against. A real :class:`~mellivor_kernel.workflow.clock.SystemClock`
                 is constructed here, at object-construction time, if none
                 is given -- never a module-level or import-time default.
 
@@ -101,12 +99,20 @@ class WorkflowEngine:
         self._max_concurrency = max_concurrency
         self._clock: Clock = clock if clock is not None else SystemClock()
 
-    def run(self, workflow: Workflow, context: WorkflowContext) -> WorkflowResult:
+    def run(
+        self,
+        workflow: Workflow,
+        context: WorkflowContext,
+        *,
+        options: WorkflowExecutionOptions | None = None,
+    ) -> WorkflowResult:
         """Run every step of ``workflow.definition``, in order.
 
         Args:
             workflow: The workflow run to execute.
             context: The shared context to run with.
+            options: Additive dynamic, parallel, and scheduling metadata
+                for this run. ``None`` preserves v1.0 behavior exactly.
 
         Returns:
             A :class:`WorkflowResult`. ``success`` is ``True`` unless a
@@ -114,6 +120,17 @@ class WorkflowEngine:
             workflow stops before running any further unit.
         """
         definition = workflow.definition
+        supplied_options = options if options is not None else WorkflowExecutionOptions()
+        # Snapshot caller-owned mappings before any execution begins. The
+        # immutable options value can accept ordinary mappings ergonomically,
+        # while a run remains deterministic even if a caller later mutates its
+        # original dictionaries.
+        execution_options = WorkflowExecutionOptions(
+            request_resolvers=dict(supplied_options.request_resolvers),
+            parallel_groups=tuple(tuple(group) for group in supplied_options.parallel_groups),
+            not_before=dict(supplied_options.not_before),
+        )
+        _validate_options(definition.steps, execution_options)
         logger = context.execution_context.logger
         logger.info(
             "Starting workflow %r (%r), %d step(s).",
@@ -125,8 +142,8 @@ class WorkflowEngine:
 
         step_results: dict[str, ExecutionResult] = {}
         running_context = context
-        for unit in _group_into_units(definition.steps):
-            unit_results = self._run_unit(unit, running_context)
+        for unit in _group_into_units(definition.steps, execution_options):
+            unit_results = self._run_unit(unit, running_context, execution_options)
 
             step_results.update(unit_results)
             running_context = dataclasses.replace(running_context, step_results=dict(step_results))
@@ -175,21 +192,27 @@ class WorkflowEngine:
         return workflow_result
 
     def _run_unit(
-        self, unit: list[WorkflowStep], context: WorkflowContext
+        self,
+        unit: list[WorkflowStep],
+        context: WorkflowContext,
+        options: WorkflowExecutionOptions,
     ) -> dict[str, ExecutionResult]:
         """Run one execution unit and return its results, keyed by step name.
 
-        A unit of exactly one ungrouped step runs inline, in the calling
-        thread -- no thread pool is used. A unit with a
-        ``parallel_group`` set runs every step concurrently.
+        A unit of exactly one non-parallel step runs inline, in the calling
+        thread -- no thread pool is used. A unit selected by an options
+        ``parallel_groups`` entry runs every step concurrently.
         """
-        if len(unit) == 1 and unit[0].parallel_group is None:
+        if len(unit) == 1 and not _is_explicitly_parallel(unit[0].name, options):
             step = unit[0]
-            return {step.name: self._resolve_and_execute_step(step, context)}
-        return self._run_parallel_group(unit, context)
+            return {step.name: self._resolve_and_execute_step(step, context, options)}
+        return self._run_parallel_group(unit, context, options)
 
     def _run_parallel_group(
-        self, group: list[WorkflowStep], context: WorkflowContext
+        self,
+        group: list[WorkflowStep],
+        context: WorkflowContext,
+        options: WorkflowExecutionOptions,
     ) -> dict[str, ExecutionResult]:
         """Run every step of ``group`` concurrently, in a thread pool
         scoped to this call, and return its results in declared order.
@@ -208,7 +231,7 @@ class WorkflowEngine:
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_step: dict[Future[ExecutionResult], WorkflowStep] = {
-                executor.submit(self._resolve_and_execute_step, step, context): step
+                executor.submit(self._resolve_and_execute_step, step, context, options): step
                 for step in group
             }
             stopped = False
@@ -239,44 +262,48 @@ class WorkflowEngine:
         return {step.name: completed[step.name] for step in group if step.name in completed}
 
     def _resolve_and_execute_step(
-        self, step: WorkflowStep, context: WorkflowContext
+        self,
+        step: WorkflowStep,
+        context: WorkflowContext,
+        options: WorkflowExecutionOptions,
     ) -> ExecutionResult:
         """Resolve ``step``'s request (static or dynamic), honor its
         scheduling guard, and execute it -- the per-step pipeline shared
         by both the inline and the parallel-unit execution paths.
         """
         now = self._clock.now()
-        if step.not_before is not None and now < step.not_before:
+        not_before = options.not_before.get(step.name)
+        if not_before is not None and now < not_before:
             return ExecutionResult(
                 success=False,
                 error=(
                     f"Step {step.name!r} is not yet due to run "
-                    f"(not_before={step.not_before.isoformat()}, now={now.isoformat()})."
+                    f"(not_before={not_before.isoformat()}, now={now.isoformat()})."
                 ),
                 metadata={"stage": "scheduling"},
             )
 
-        if step.request_factory is not None:
+        resolver = options.request_resolvers.get(step.name)
+        if resolver is not None:
             try:
-                candidate = step.request_factory(context)
+                candidate = resolver(context, step.request)
             except Exception as exc:
                 return ExecutionResult(
                     success=False,
-                    error=f"Dynamic request construction failed for step {step.name!r}: {exc}",
+                    error=f"Dynamic request resolution failed for step {step.name!r}: {exc}",
                     metadata={"stage": "dynamic_request"},
                 )
             if not isinstance(candidate, ExecutionRequest):
                 return ExecutionResult(
                     success=False,
                     error=(
-                        f"Step {step.name!r}'s request_factory returned "
+                        f"Step {step.name!r}'s request resolver returned "
                         f"{type(candidate).__name__}, expected ExecutionRequest."
                     ),
                     metadata={"stage": "dynamic_request"},
                 )
             request = candidate
         else:
-            assert step.request is not None  # enforced by WorkflowStep.__post_init__
             request = step.request
 
         return self._execution_engine.execute(
@@ -326,27 +353,60 @@ class WorkflowEngine:
             )
 
 
-def _group_into_units(steps: tuple[WorkflowStep, ...]) -> list[list[WorkflowStep]]:
-    """Partition ``steps`` into execution units: a maximal run of 1+
-    steps sharing the same non-``None`` ``parallel_group``, or a single
-    ungrouped step.
+def _group_into_units(
+    steps: tuple[WorkflowStep, ...], options: WorkflowExecutionOptions
+) -> list[list[WorkflowStep]]:
+    """Partition steps using explicitly supplied parallel groups.
 
-    Relies on :class:`~mellivor_kernel.workflow.definition.WorkflowDefinition`
-    already having validated that a given ``parallel_group`` value's
-    steps are contiguous, so a group name is never split across two
-    units here.
+    Option validation has already established that each group is contiguous
+    and follows declaration order, so no group can be split across units.
     """
     units: list[list[WorkflowStep]] = []
+    group_by_name = {
+        step_name: group_index
+        for group_index, group in enumerate(options.parallel_groups)
+        for step_name in group
+    }
     for step in steps:
+        group_index = group_by_name.get(step.name)
         if (
-            step.parallel_group is not None
+            group_index is not None
             and units
-            and units[-1][0].parallel_group == step.parallel_group
+            and group_by_name.get(units[-1][0].name) == group_index
         ):
             units[-1].append(step)
         else:
             units.append([step])
     return units
+
+
+def _is_explicitly_parallel(step_name: str, options: WorkflowExecutionOptions) -> bool:
+    return any(step_name in group for group in options.parallel_groups)
+
+
+def _validate_options(steps: tuple[WorkflowStep, ...], options: WorkflowExecutionOptions) -> None:
+    declared_names = tuple(step.name for step in steps)
+    declared_set = set(declared_names)
+    referenced_names = (
+        set(options.request_resolvers)
+        | set(options.not_before)
+        | {step_name for group in options.parallel_groups for step_name in group}
+    )
+    unknown_names = sorted(referenced_names - declared_set)
+    if unknown_names:
+        raise WorkflowError(
+            f"WorkflowExecutionOptions references unknown step(s): {', '.join(unknown_names)}."
+        )
+
+    positions = {step_name: index for index, step_name in enumerate(declared_names)}
+    for group in options.parallel_groups:
+        indexes = [positions[step_name] for step_name in group]
+        declared_group_order = tuple(declared_names[index] for index in sorted(indexes))
+        if tuple(group) != declared_group_order or max(indexes) - min(indexes) + 1 != len(indexes):
+            raise WorkflowError(
+                "WorkflowExecutionOptions.parallel_groups must name contiguous steps "
+                "in their declared workflow order."
+            )
 
 
 def _first_stopping_failure(

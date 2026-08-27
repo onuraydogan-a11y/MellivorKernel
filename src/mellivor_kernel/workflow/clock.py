@@ -1,7 +1,7 @@
 """Clock: an injectable time source for scheduling-guard checks.
 
-Exists so `WorkflowStep.not_before` (see ADR-0024) can be evaluated
-deterministically in tests, with no real sleep or wall-clock dependency
+Exists so execution-option ``not_before`` values (see ADR-0025) can be
+evaluated deterministically in tests, with no real sleep or wall-clock dependency
 -- never to support a background timer, poller, or scheduler. There is
 no default global clock instance; `WorkflowEngine` constructs its own
 `SystemClock()` at object-construction time if none is injected, never

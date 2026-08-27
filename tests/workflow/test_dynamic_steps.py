@@ -25,6 +25,7 @@ from mellivor_kernel.workflow import (
     WorkflowDefinition,
     WorkflowEngine,
     WorkflowError,
+    WorkflowExecutionOptions,
     WorkflowStep,
 )
 
@@ -51,41 +52,51 @@ def _make_execution_engine() -> ExecutionEngine:
     return ExecutionEngine(Dispatcher(tool_registry, ProviderRegistry()))
 
 
-def _static_step(
-    name: str, *, payload: Mapping[str, object] | None = None, **kwargs: object
-) -> WorkflowStep:
+def _static_step(name: str, *, payload: Mapping[str, object] | None = None) -> WorkflowStep:
     return WorkflowStep(
         name=name,
         request=ExecutionRequest(
             target=ExecutionTarget.TOOL, operation="echo", payload=payload or {}
         ),
-        **kwargs,  # type: ignore[arg-type]
     )
 
 
 # -- construction / invariants -------------------------------------------------
 
 
-def test_step_requires_exactly_one_of_request_or_request_factory() -> None:
-    with pytest.raises(WorkflowError):
-        WorkflowStep(name="both", request=None, request_factory=None)
+def test_options_reject_a_non_callable_request_resolver() -> None:
+    with pytest.raises(WorkflowError, match="must be callable"):
+        WorkflowExecutionOptions(request_resolvers={"step": "not callable"})  # type: ignore[dict-item]
 
 
-def test_step_rejects_both_request_and_request_factory() -> None:
-    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
-    with pytest.raises(WorkflowError):
-        WorkflowStep(name="both", request=request, request_factory=lambda context: request)
-
-
-def test_dynamic_step_accepts_request_factory_alone() -> None:
-    step = WorkflowStep(
-        name="dyn",
-        request_factory=lambda context: ExecutionRequest(
-            target=ExecutionTarget.TOOL, operation="echo"
-        ),
+def test_options_reject_an_unknown_step_name_when_run() -> None:
+    engine = WorkflowEngine(_make_execution_engine())
+    workflow = Workflow(definition=WorkflowDefinition(name="empty"))
+    options = WorkflowExecutionOptions(
+        request_resolvers={"missing": lambda context, request: request}
     )
-    assert step.request is None
-    assert step.request_factory is not None
+
+    with pytest.raises(WorkflowError, match="unknown step"):
+        engine.run(workflow, _make_context(), options=options)
+
+
+def test_dynamic_resolver_uses_the_required_static_request_as_its_base() -> None:
+    request = ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo", payload={"base": 1})
+    step = WorkflowStep(name="dyn", request=request)
+    seen: list[ExecutionRequest] = []
+
+    def resolve(context: WorkflowContext, base: ExecutionRequest) -> ExecutionRequest:
+        seen.append(base)
+        return base
+
+    result = WorkflowEngine(_make_execution_engine()).run(
+        Workflow(definition=WorkflowDefinition(name="dynamic", steps=(step,))),
+        _make_context(),
+        options=WorkflowExecutionOptions(request_resolvers={"dyn": resolve}),
+    )
+
+    assert result.success is True
+    assert seen == [request]
 
 
 # -- static workflow unchanged --------------------------------------------------
@@ -106,19 +117,24 @@ def test_static_step_still_uses_request_directly() -> None:
 
 def test_dynamic_step_reads_a_prior_step_result() -> None:
     engine = WorkflowEngine(_make_execution_engine())
-    dynamic_step = WorkflowStep(
-        name="second",
-        request_factory=lambda context: ExecutionRequest(
+    dynamic_step = _static_step("second")
+
+    def resolver(context: WorkflowContext, request: ExecutionRequest) -> ExecutionRequest:
+        return ExecutionRequest(
             target=ExecutionTarget.TOOL,
             operation="echo",
             payload={"from_first": context.step_results["first"].payload},
-        ),
-    )
+        )
+
     definition = WorkflowDefinition(
         name="chain", steps=(_static_step("first", payload={"n": 1}), dynamic_step)
     )
 
-    result = engine.run(Workflow(definition=definition), _make_context())
+    result = engine.run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(request_resolvers={"second": resolver}),
+    )
 
     assert result.success is True
     assert result.step_results["second"].payload == {"from_first": {"n": 1}}
@@ -127,13 +143,13 @@ def test_dynamic_step_reads_a_prior_step_result() -> None:
 def test_dynamic_step_chains_across_three_steps() -> None:
     engine = WorkflowEngine(_make_execution_engine())
 
-    def build_second(context: WorkflowContext) -> ExecutionRequest:
+    def build_second(context: WorkflowContext, request: ExecutionRequest) -> ExecutionRequest:
         first_value = cast(int, context.step_results["first"].payload["n"])  # type: ignore[index]
         return ExecutionRequest(
             target=ExecutionTarget.TOOL, operation="echo", payload={"n": first_value + 1}
         )
 
-    def build_third(context: WorkflowContext) -> ExecutionRequest:
+    def build_third(context: WorkflowContext, request: ExecutionRequest) -> ExecutionRequest:
         second_value = cast(int, context.step_results["second"].payload["n"])  # type: ignore[index]
         return ExecutionRequest(
             target=ExecutionTarget.TOOL, operation="echo", payload={"n": second_value + 1}
@@ -143,12 +159,18 @@ def test_dynamic_step_chains_across_three_steps() -> None:
         name="chain3",
         steps=(
             _static_step("first", payload={"n": 1}),
-            WorkflowStep(name="second", request_factory=build_second),
-            WorkflowStep(name="third", request_factory=build_third),
+            _static_step("second"),
+            _static_step("third"),
         ),
     )
 
-    result = engine.run(Workflow(definition=definition), _make_context())
+    result = engine.run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(
+            request_resolvers={"second": build_second, "third": build_third}
+        ),
+    )
 
     assert result.success is True
     assert result.step_results["second"].payload == {"n": 2}
@@ -161,8 +183,10 @@ def test_dynamic_result_to_parallel_group_to_downstream_sequential_step() -> Non
     """
     engine = WorkflowEngine(_make_execution_engine())
 
-    def parallel_request(label: str) -> Callable[[WorkflowContext], ExecutionRequest]:
-        def build(context: WorkflowContext) -> ExecutionRequest:
+    def parallel_request(
+        label: str,
+    ) -> Callable[[WorkflowContext, ExecutionRequest], ExecutionRequest]:
+        def build(context: WorkflowContext, request: ExecutionRequest) -> ExecutionRequest:
             seed = context.step_results["seed"].payload["value"]  # type: ignore[index]
             return ExecutionRequest(
                 target=ExecutionTarget.TOOL,
@@ -172,7 +196,7 @@ def test_dynamic_result_to_parallel_group_to_downstream_sequential_step() -> Non
 
         return build
 
-    def build_final(context: WorkflowContext) -> ExecutionRequest:
+    def build_final(context: WorkflowContext, request: ExecutionRequest) -> ExecutionRequest:
         return ExecutionRequest(
             target=ExecutionTarget.TOOL,
             operation="echo",
@@ -188,19 +212,24 @@ def test_dynamic_result_to_parallel_group_to_downstream_sequential_step() -> Non
         name="dynamic-parallel-sequential",
         steps=(
             _static_step("seed", payload={"value": 7}),
-            WorkflowStep(
-                name="left", request_factory=parallel_request("left"), parallel_group="fanout"
-            ),
-            WorkflowStep(
-                name="right",
-                request_factory=parallel_request("right"),
-                parallel_group="fanout",
-            ),
-            WorkflowStep(name="final", request_factory=build_final),
+            _static_step("left"),
+            _static_step("right"),
+            _static_step("final"),
         ),
     )
 
-    result = engine.run(Workflow(definition=definition), _make_context())
+    result = engine.run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(
+            request_resolvers={
+                "left": parallel_request("left"),
+                "right": parallel_request("right"),
+                "final": build_final,
+            },
+            parallel_groups=(("left", "right"),),
+        ),
+    )
 
     assert result.success is True
     assert list(result.step_results) == ["seed", "left", "right", "final"]
@@ -212,17 +241,22 @@ def test_dynamic_result_to_parallel_group_to_downstream_sequential_step() -> Non
 
 def test_missing_prior_result_fails_the_step_not_the_run() -> None:
     engine = WorkflowEngine(_make_execution_engine())
-    dynamic_step = WorkflowStep(
-        name="dyn",
-        request_factory=lambda context: ExecutionRequest(
+    dynamic_step = _static_step("dyn")
+
+    def resolver(context: WorkflowContext, request: ExecutionRequest) -> ExecutionRequest:
+        return ExecutionRequest(
             target=ExecutionTarget.TOOL,
             operation="echo",
             payload=dict(context.step_results["nonexistent"].payload or {}),
-        ),
-    )
+        )
+
     definition = WorkflowDefinition(name="missing-ref", steps=(dynamic_step,))
 
-    result = engine.run(Workflow(definition=definition), _make_context())
+    result = engine.run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(request_resolvers={"dyn": resolver}),
+    )
 
     assert result.success is False
     assert result.stopped_at == "dyn"
@@ -243,17 +277,22 @@ def test_dynamic_step_can_read_a_failed_prior_steps_result() -> None:
         request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="does-not-exist"),
         continue_on_failure=True,
     )
-    dynamic_step = WorkflowStep(
-        name="after",
-        request_factory=lambda context: ExecutionRequest(
+    dynamic_step = _static_step("after")
+
+    def resolver(context: WorkflowContext, request: ExecutionRequest) -> ExecutionRequest:
+        return ExecutionRequest(
             target=ExecutionTarget.TOOL,
             operation="echo",
             payload={"prior_succeeded": context.step_results["fails"].success},
-        ),
-    )
+        )
+
     definition = WorkflowDefinition(name="failed-dep", steps=(failing_step, dynamic_step))
 
-    result = engine.run(Workflow(definition=definition), _make_context())
+    result = engine.run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(request_resolvers={"after": resolver}),
+    )
 
     assert result.success is True
     assert result.step_results["after"].payload == {"prior_succeeded": False}
@@ -262,19 +301,21 @@ def test_dynamic_step_can_read_a_failed_prior_steps_result() -> None:
 # -- deterministic request construction ------------------------------------------
 
 
-def test_request_factory_is_called_exactly_once_per_run() -> None:
+def test_request_resolver_is_called_exactly_once_per_run() -> None:
     calls: list[int] = []
 
-    def build(context: WorkflowContext) -> ExecutionRequest:
+    def build(context: WorkflowContext, request: ExecutionRequest) -> ExecutionRequest:
         calls.append(1)
         return ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
 
     engine = WorkflowEngine(_make_execution_engine())
-    definition = WorkflowDefinition(
-        name="once", steps=(WorkflowStep(name="dyn", request_factory=build),)
-    )
+    definition = WorkflowDefinition(name="once", steps=(_static_step("dyn"),))
 
-    engine.run(Workflow(definition=definition), _make_context())
+    engine.run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(request_resolvers={"dyn": build}),
+    )
 
     assert len(calls) == 1
 
@@ -282,14 +323,14 @@ def test_request_factory_is_called_exactly_once_per_run() -> None:
 # -- no prior-result mutation ------------------------------------------------------
 
 
-def test_request_factory_cannot_retroactively_affect_earlier_results() -> None:
+def test_request_resolver_cannot_retroactively_affect_earlier_results() -> None:
     """Mutating the `step_results` mapping inside a factory (a caller
     misuse -- the kernel does not prevent it structurally, see ADR-0024)
     cannot corrupt the workflow's own accumulated state, since each
     `WorkflowContext` snapshot is a distinct `dict` object.
     """
 
-    def misbehaving_build(context: WorkflowContext) -> ExecutionRequest:
+    def misbehaving_build(context: WorkflowContext, request: ExecutionRequest) -> ExecutionRequest:
         mutable = context.step_results
         if isinstance(mutable, dict):
             mutable["injected"] = context.step_results["first"]
@@ -300,11 +341,15 @@ def test_request_factory_cannot_retroactively_affect_earlier_results() -> None:
         name="no-mutation",
         steps=(
             _static_step("first", payload={"n": 1}),
-            WorkflowStep(name="second", request_factory=misbehaving_build),
+            _static_step("second"),
         ),
     )
 
-    result = engine.run(Workflow(definition=definition), _make_context())
+    result = engine.run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(request_resolvers={"second": misbehaving_build}),
+    )
 
     assert result.success is True
     assert set(result.step_results) == {"first", "second"}
@@ -314,24 +359,36 @@ def test_request_factory_cannot_retroactively_affect_earlier_results() -> None:
 # -- invalid dynamic resolver output -----------------------------------------------
 
 
-def test_request_factory_returning_the_wrong_type_fails_clearly() -> None:
+def test_request_resolver_returning_the_wrong_type_fails_clearly() -> None:
     engine = WorkflowEngine(_make_execution_engine())
-    bad_step = WorkflowStep(name="bad", request_factory=lambda context: "not a request")  # type: ignore[arg-type,return-value]
+    bad_step = _static_step("bad")
     definition = WorkflowDefinition(name="bad-output", steps=(bad_step,))
 
-    result = engine.run(Workflow(definition=definition), _make_context())
+    result = engine.run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(
+            request_resolvers={"bad": lambda context, request: "not a request"}  # type: ignore[dict-item,return-value]
+        ),
+    )
 
     assert result.success is False
     assert result.step_results["bad"].metadata["stage"] == "dynamic_request"
     assert "str" in (result.step_results["bad"].error or "")
 
 
-def test_request_factory_returning_none_fails_clearly() -> None:
+def test_request_resolver_returning_none_fails_clearly() -> None:
     engine = WorkflowEngine(_make_execution_engine())
-    bad_step = WorkflowStep(name="bad", request_factory=lambda context: None)  # type: ignore[arg-type,return-value]
+    bad_step = _static_step("bad")
     definition = WorkflowDefinition(name="bad-none", steps=(bad_step,))
 
-    result = engine.run(Workflow(definition=definition), _make_context())
+    result = engine.run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(
+            request_resolvers={"bad": lambda context, request: None}  # type: ignore[dict-item,return-value]
+        ),
+    )
 
     assert result.success is False
     assert result.step_results["bad"].metadata["stage"] == "dynamic_request"
@@ -340,19 +397,21 @@ def test_request_factory_returning_none_fails_clearly() -> None:
 # -- exception translation / boundaries --------------------------------------------
 
 
-def test_request_factory_raising_a_custom_exception_is_translated() -> None:
+def test_request_resolver_raising_a_custom_exception_is_translated() -> None:
     class _CustomError(RuntimeError):
         pass
 
-    def raises(context: WorkflowContext) -> ExecutionRequest:
+    def raises(context: WorkflowContext, request: ExecutionRequest) -> ExecutionRequest:
         raise _CustomError("boom")
 
     engine = WorkflowEngine(_make_execution_engine())
-    definition = WorkflowDefinition(
-        name="raises", steps=(WorkflowStep(name="dyn", request_factory=raises),)
-    )
+    definition = WorkflowDefinition(name="raises", steps=(_static_step("dyn"),))
 
-    result = engine.run(Workflow(definition=definition), _make_context())
+    result = engine.run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(request_resolvers={"dyn": raises}),
+    )
 
     assert result.success is False
     assert result.step_results["dyn"].metadata["stage"] == "dynamic_request"
@@ -363,26 +422,34 @@ def test_dynamic_request_failure_respects_continue_on_failure() -> None:
     engine = WorkflowEngine(_make_execution_engine())
     failing_dynamic = WorkflowStep(
         name="dyn",
-        request_factory=lambda context: (_ for _ in ()).throw(RuntimeError("nope")),
+        request=ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo"),
         continue_on_failure=True,
     )
     definition = WorkflowDefinition(
         name="tolerant-dynamic", steps=(failing_dynamic, _static_step("after", payload={"n": 1}))
     )
 
-    result = engine.run(Workflow(definition=definition), _make_context())
+    result = engine.run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(
+            request_resolvers={
+                "dyn": lambda context, request: (_ for _ in ()).throw(RuntimeError("nope"))
+            }
+        ),
+    )
 
     assert result.success is True
     assert result.step_results["dyn"].success is False
     assert result.step_results["after"].success is True
 
 
-def test_not_before_is_checked_before_request_factory_is_called() -> None:
+def test_not_before_is_checked_before_request_resolver_is_called() -> None:
     from datetime import UTC, datetime, timedelta
 
     calls: list[int] = []
 
-    def build(context: WorkflowContext) -> ExecutionRequest:
+    def build(context: WorkflowContext, request: ExecutionRequest) -> ExecutionRequest:
         calls.append(1)
         return ExecutionRequest(target=ExecutionTarget.TOOL, operation="echo")
 
@@ -390,10 +457,16 @@ def test_not_before_is_checked_before_request_factory_is_called() -> None:
     engine = WorkflowEngine(_make_execution_engine())
     definition = WorkflowDefinition(
         name="order",
-        steps=(WorkflowStep(name="dyn", request_factory=build, not_before=future),),
+        steps=(_static_step("dyn"),),
     )
 
-    result = engine.run(Workflow(definition=definition), _make_context())
+    result = engine.run(
+        Workflow(definition=definition),
+        _make_context(),
+        options=WorkflowExecutionOptions(
+            request_resolvers={"dyn": build}, not_before={"dyn": future}
+        ),
+    )
 
     assert result.success is False
     assert calls == []

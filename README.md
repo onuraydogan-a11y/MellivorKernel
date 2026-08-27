@@ -211,11 +211,14 @@ may optionally record execution outcomes through either; see
 [ADR-0009](docs/adr/0009-memory-subsystem-and-execution-recording.md) and
 [ADR-0021](docs/adr/0021-persistent-memory-sqlite-store.md)),
 `workflow` (`Workflow`, `WorkflowDefinition`, `WorkflowStep`,
-`WorkflowContext`, `WorkflowEngine`, `WorkflowResult` — composes
-sequential multi-step runs by delegating every step to `ExecutionEngine`;
-never touches a tool or provider directly, and `execution` has no
-dependency back on it; see
-[ADR-0010](docs/adr/0010-workflow-engine-and-orchestration-boundary.md)),
+`WorkflowContext`, `WorkflowExecutionOptions`, `RequestResolver`, `Clock`,
+`SystemClock`, `WorkflowEngine`, `WorkflowResult` — composes sequential
+multi-step runs by delegating every step to `ExecutionEngine`; v1.1
+dynamic/parallel/scheduling behavior is supplied externally per run so the
+frozen v1.0 `WorkflowStep` shape remains exact; never touches a tool or
+provider directly, and `execution` has no dependency back on it; see
+[ADR-0010](docs/adr/0010-workflow-engine-and-orchestration-boundary.md) and
+[ADR-0025](docs/adr/0025-workflow-execution-options-compatibility-repair.md)),
 and a first, deliberately minimal slice of `agents` — Agent Runtime Core
 (`Agent`, `AgentDefinition`, `AgentContext`, `AgentEngine`, `AgentResult`
 — an agent invokes exactly one workflow by delegating entirely to

@@ -10,15 +10,13 @@ duplicates, bypasses, or reimplements anything ``execution`` already does.
 ``execution`` (and every subsystem below it) has no dependency on
 ``workflow`` and never will -- see ADR-0010.
 
-As of Sprint 30 (see ADR-0024), a step may additionally: build its
-request dynamically from prior results (``WorkflowStep.request_factory``),
-run concurrently with contiguous same-``parallel_group`` siblings, and
-carry a ``not_before`` scheduling guard. A workflow that uses none of
-these remains observably identical to a Sprint-12-era sequential
-workflow -- no parallel steps, no scheduling, and no dynamic requests
-happen unless explicitly opted into. No cron, no persistence beyond
-whatever ``memory`` itself provides, no external queue, broker, or
-background daemon.
+As of Sprint 30's compatibility repair (see ADR-0025), callers may supply
+``WorkflowExecutionOptions`` to build requests from prior results, run named
+contiguous groups concurrently, and apply ``not_before`` eligibility guards.
+The frozen v1.0 ``WorkflowStep`` surface is unchanged. A run without options
+remains observably identical to a Sprint-12-era sequential workflow. No cron,
+no persistence beyond whatever ``memory`` itself provides, no external queue,
+broker, or background daemon.
 """
 
 from __future__ import annotations
@@ -29,12 +27,14 @@ from mellivor_kernel.workflow.definition import WorkflowDefinition
 from mellivor_kernel.workflow.engine import WorkflowEngine
 from mellivor_kernel.workflow.events import WorkflowCompleted, WorkflowFailed, WorkflowStarted
 from mellivor_kernel.workflow.exceptions import WorkflowError
+from mellivor_kernel.workflow.options import RequestResolver, WorkflowExecutionOptions
 from mellivor_kernel.workflow.result import WorkflowResult
 from mellivor_kernel.workflow.step import WorkflowStep
 from mellivor_kernel.workflow.workflow import Workflow
 
 __all__ = [
     "Clock",
+    "RequestResolver",
     "SystemClock",
     "Workflow",
     "WorkflowCompleted",
@@ -42,6 +42,7 @@ __all__ = [
     "WorkflowDefinition",
     "WorkflowEngine",
     "WorkflowError",
+    "WorkflowExecutionOptions",
     "WorkflowFailed",
     "WorkflowResult",
     "WorkflowStarted",
