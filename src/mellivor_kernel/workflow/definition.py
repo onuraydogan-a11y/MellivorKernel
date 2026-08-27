@@ -33,13 +33,36 @@ class WorkflowDefinition:
         """Validate cross-field invariants.
 
         Raises:
-            WorkflowError: If ``name`` is blank, or if ``steps`` contains
-                two steps with the same ``name`` -- a duplicate would
-                silently overwrite the earlier step's entry in
-                :attr:`~mellivor_kernel.workflow.result.WorkflowResult.step_results`.
+            WorkflowError: If ``name`` is blank; if ``steps`` contains two
+                steps with the same ``name`` -- a duplicate would silently
+                overwrite the earlier step's entry in
+                :attr:`~mellivor_kernel.workflow.result.WorkflowResult.step_results`;
+                or if two steps share a
+                :attr:`~mellivor_kernel.workflow.step.WorkflowStep.parallel_group`
+                value without being contiguous in ``steps`` (see
+                ADR-0024).
         """
         if not self.name.strip():
             raise WorkflowError("WorkflowDefinition.name must not be blank.")
         names = [step.name for step in self.steps]
         if len(names) != len(set(names)):
             raise WorkflowError("WorkflowDefinition.steps must have unique names.")
+        _validate_parallel_group_contiguity(self.steps)
+
+
+def _validate_parallel_group_contiguity(steps: tuple[WorkflowStep, ...]) -> None:
+    """Raise if any non-``None`` ``parallel_group`` value's steps are not
+    all adjacent in ``steps``.
+    """
+    seen_groups: set[str] = set()
+    previous_group: str | None = None
+    for step in steps:
+        group = step.parallel_group
+        if group is not None and group != previous_group:
+            if group in seen_groups:
+                raise WorkflowError(
+                    f"WorkflowDefinition.steps: parallel_group {group!r} must be "
+                    "contiguous (all its steps adjacent in `steps`)."
+                )
+            seen_groups.add(group)
+        previous_group = group

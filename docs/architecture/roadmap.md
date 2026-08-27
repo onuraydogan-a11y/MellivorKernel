@@ -238,15 +238,12 @@ order, not a recommendation:
 | 27 | Persistent `MemoryStore` (`memory.SQLiteMemoryStore`) | Shipped — see [ADR-0021](../adr/0021-persistent-memory-sqlite-store.md) |
 | 28 | Concrete `SecretProvider` backend (`security.EnvSecretProvider`) | Shipped — see [ADR-0022](../adr/0022-env-secret-provider.md) |
 | 29 | Gemini provider (`providers.gemini.GeminiProvider`) | Shipped — see [ADR-0023](../adr/0023-gemini-provider.md) |
-| 30 | Workflow evolution (dynamic steps / parallel / scheduling) | Approved, not started |
+| 30 | Workflow evolution (dynamic steps / parallel / scheduling) | Shipped — see [ADR-0024](../adr/0024-workflow-dynamic-parallel-scheduled-steps.md) |
 | 31 | v1.1 Release Gate | Approved, not started |
 
-Sprints 28–31 are sequenced, not designed — each still requires its own
-ADR (where architecturally significant, per CLAUDE.md §8) and Phase-1
-architecture review before implementation begins, the same discipline
-Sprint 27 followed. Nothing about their eventual design is fixed by this
-table beyond the order and the one-line scope already named in the
-`Deferred to v1.1` classification above.
+Sprint 31 remains sequenced but not designed; it still requires its own
+architecture review before implementation. Sprint 30 followed that discipline
+through ADR-0024. Nothing in this table starts Sprint 31 or release work.
 
 Sprint 27 shipped `memory.SQLiteMemoryStore`, a second, durable
 `MemoryStore` implementation proving the existing abstraction beyond
@@ -255,6 +252,14 @@ library, added with zero change to `MemoryStore`, `MemoryEntry`,
 `MemoryQuery`, `MemoryResult`, `MemoryError`, `InMemoryStore`, or
 `Memory`. See ADR-0021 and
 [`docs/specs/memory.md`](../specs/memory.md).
+
+Sprint 30 shipped additive workflow evolution: callable-based dynamic request
+construction, opt-in contiguous parallel groups with deterministic result
+presentation, and an injectable-clock `not_before` eligibility guard. Existing
+static sequential behavior is unchanged. Durable scheduling remains an
+external-runtime responsibility; Kernel adds no daemon, queue, cron service,
+persistence, or background worker. See ADR-0024 and
+[`docs/specs/workflow.md`](../specs/workflow.md).
 
 Sprint 28 shipped `security.EnvSecretProvider`, the first concrete
 `SecretProvider` implementation — read-only, backed by process

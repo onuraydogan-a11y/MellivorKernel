@@ -135,8 +135,9 @@ pull request against `main`, on Python 3.12 and 3.13.
 ## Status
 
 **Stable v1.0.0, v1.1 development underway.** Sprint 27 (persistent
-`MemoryStore`), Sprint 28 (concrete `SecretProvider` backend), and
-Sprint 29 (Gemini provider) have shipped; see
+`MemoryStore`), Sprint 28 (concrete `SecretProvider` backend), Sprint 29
+(Gemini provider), and Sprint 30 (additive workflow evolution) have shipped;
+see
 [`docs/architecture/roadmap.md`](docs/architecture/roadmap.md) for the
 approved Sprint 27–31 sequence. The `1.0.0` compatibility promise below is
 unchanged — v1.1 sprints are additive, per
