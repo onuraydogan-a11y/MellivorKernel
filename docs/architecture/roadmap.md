@@ -239,13 +239,14 @@ order, not a recommendation:
 | 28 | Concrete `SecretProvider` backend (`security.EnvSecretProvider`) | Shipped — see [ADR-0022](../adr/0022-env-secret-provider.md) |
 | 29 | Gemini provider (`providers.gemini.GeminiProvider`) | Shipped — see [ADR-0023](../adr/0023-gemini-provider.md) |
 | 30 | Workflow evolution (dynamic steps / parallel / scheduling) | Shipped; v1.0 compatibility repaired — see [ADR-0025](../adr/0025-workflow-execution-options-compatibility-repair.md) |
-| 31 | v1.1 Release Gate | Approved, not started |
+| 31 | v1.1 Release Gate | Complete — release commit prepared; tag awaits Product Owner approval |
 
-Sprint 31 remains sequenced but not designed; it still requires its own
-architecture review before implementation. Sprint 30 followed that discipline
-through ADR-0024, with its public surface corrected by ADR-0025 after the
-release-gate compatibility audit. Nothing in this table starts Sprint 31 or
-release work.
+Sprint 31 repeated the complete release-readiness audit against the repaired
+Sprint 30 architecture. The v1.0 public surface remains compatible, all local
+and CI gates are green, packaging and isolated-install checks pass, and the
+`1.1.0` release commit is prepared. The tag remains a separate Product Owner
+approval step, following the v1.0 precedent. See
+[`docs/release/v1.1-release-audit.md`](../release/v1.1-release-audit.md).
 
 Sprint 27 shipped `memory.SQLiteMemoryStore`, a second, durable
 `MemoryStore` implementation proving the existing abstraction beyond

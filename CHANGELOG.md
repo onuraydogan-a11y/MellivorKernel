@@ -6,6 +6,53 @@ start at `1.0.0` — no prior release is backfilled here; the pre-1.0 history
 is recorded in [`RELEASE_NOTES_v0.5.0.md`](RELEASE_NOTES_v0.5.0.md) and
 [`docs/architecture/roadmap.md`](docs/architecture/roadmap.md).
 
+## [1.1.0] - 2026-08-28
+
+Backward-compatible expansion of the stable v1 API. See
+[`RELEASE_NOTES_v1.1.0.md`](RELEASE_NOTES_v1.1.0.md) and the
+[Sprint 31 release audit](docs/release/v1.1-release-audit.md).
+
+### Added
+
+- `SQLiteMemoryStore`, a durable standard-library SQLite implementation of
+  the unchanged `MemoryStore` contract.
+- `EnvSecretProvider` and backend-agnostic missing/value/configuration secret
+  errors, all compatible `SecurityError` subclasses.
+- `GeminiProvider` behind the optional `gemini` extra.
+- `WorkflowExecutionOptions`, `RequestResolver`, `Clock`, `SystemClock`, and
+  the optional keyword-only `WorkflowEngine.run(..., options=...)` extension
+  for dynamic requests, explicit parallel groups, and `not_before` guards.
+
+### Changed
+
+- Provider dependency bounds now declare supported major versions:
+  `anthropic>=0.40,<1`, `openai>=1.0,<3`, and `google-genai>=2.0,<3`.
+- CI installs all provider extras. The directly imported test dependency
+  `httpx` is declared in `dev`; it remains absent from base runtime
+  dependencies and is owned at runtime by the `gemini` extra.
+
+### Compatibility correction
+
+- ADR-0025 supersedes ADR-0024's direct additions to `WorkflowStep`.
+  `WorkflowStep` is identical to v1.0 in constructor, annotations, fields,
+  defaults, dataclass behavior, representation, equality/hash, serialization,
+  subclassing, and static typing.
+
+### Breaking changes
+
+- None.
+
+### Known limitations
+
+- A single `SQLiteMemoryStore` connection must not be shared across workflow
+  parallel branches without external synchronization. Use per-branch stores
+  or another thread-safe `MemoryStore`.
+- Scheduling is an eligibility check only. Kernel owns no daemon, polling
+  loop, persistent scheduler, queue, or background worker.
+- Gemini remains synchronous plain-text Developer API support; streaming,
+  tools, multimodal input, Vertex AI authentication, and batch execution are
+  intentionally deferred.
+
 ## [1.0.0] - 2026-07-28
 
 First stable release. See
