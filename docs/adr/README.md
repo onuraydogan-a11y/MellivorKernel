@@ -55,3 +55,4 @@ Small, local, easily reversible choices do not need an ADR.
 | [0023](0023-gemini-provider.md) | Third concrete provider: `GeminiProvider` | Accepted |
 | [0024](0024-workflow-dynamic-parallel-scheduled-steps.md) | Workflow evolution: dynamic steps, parallel execution, scheduling | Superseded by ADR-0025 |
 | [0025](0025-workflow-execution-options-compatibility-repair.md) | Preserve WorkflowStep v1.0 through external execution options | Accepted |
+| [0026](0026-local-provider-openai-compatible-endpoint.md) | Local provider through an OpenAI-compatible endpoint | Accepted |

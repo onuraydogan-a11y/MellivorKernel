@@ -239,13 +239,13 @@ order, not a recommendation:
 | 28 | Concrete `SecretProvider` backend (`security.EnvSecretProvider`) | Shipped — see [ADR-0022](../adr/0022-env-secret-provider.md) |
 | 29 | Gemini provider (`providers.gemini.GeminiProvider`) | Shipped — see [ADR-0023](../adr/0023-gemini-provider.md) |
 | 30 | Workflow evolution (dynamic steps / parallel / scheduling) | Shipped; v1.0 compatibility repaired — see [ADR-0025](../adr/0025-workflow-execution-options-compatibility-repair.md) |
-| 31 | v1.1 Release Gate | Complete — release commit prepared; tag awaits Product Owner approval |
+| 31 | v1.1 Release Gate | Complete — `v1.1.0` released |
 
 Sprint 31 repeated the complete release-readiness audit against the repaired
 Sprint 30 architecture. The v1.0 public surface remains compatible, all local
 and CI gates are green, packaging and isolated-install checks pass, and the
-`1.1.0` release commit is prepared. The tag remains a separate Product Owner
-approval step, following the v1.0 precedent. See
+`1.1.0` release commit passed its final CI gate and the Product Owner approved
+and published the tag. See
 [`docs/release/v1.1-release-audit.md`](../release/v1.1-release-audit.md).
 
 Sprint 27 shipped `memory.SQLiteMemoryStore`, a second, durable
@@ -291,3 +291,16 @@ transport-level failures into the same five-class exception shape
 `GeminiConnectionError`/`GeminiResponseError`) `ClaudeProvider`/
 `OpenAIProvider` already established. See ADR-0023 and
 [`docs/specs/providers.md`](../specs/providers.md).
+
+## Post-v1.1 development
+
+| Sprint | Item | Status |
+|---|---|---|
+| 32 | Local model provider (`providers.local.LocalProvider`) | Shipped — OpenAI-compatible endpoint adapter; see [ADR-0026](../adr/0026-local-provider-openai-compatible-endpoint.md) |
+
+Sprint 32 begins post-v1.1 development without defining a broader v1.2
+roadmap. `LocalProvider` connects only to a caller-managed, already-running
+OpenAI-compatible endpoint. It does not install runtimes, download models,
+start processes, or expand `BaseProvider`. Ollama-native lifecycle/model
+management, streaming, tools, multimodal input, and embeddings remain outside
+this sprint.

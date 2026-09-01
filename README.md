@@ -116,9 +116,10 @@ pre-commit install
 
 Tests for `providers.claude.ClaudeProvider`, `providers.openai.OpenAIProvider`,
 and `providers.gemini.GeminiProvider` require their respective optional
-`anthropic`/`openai`/`google-genai` packages; without them (plain
+`anthropic`/`openai`/`google-genai` packages; `LocalProvider` uses HTTPX from
+the `local` extra. Without the vendor SDKs (plain
 `[dev]`) those test files skip cleanly rather than failing. Install
-`pip install -e ".[dev,anthropic,openai,gemini]"` to also exercise them
+`pip install -e ".[dev,anthropic,openai,gemini,local]"` to exercise all providers
 (CI does this). None ever calls a live API — only real SDK types are
 used, with a fake client injected in place of network I/O.
 
@@ -134,13 +135,16 @@ pull request against `main`, on Python 3.12 and 3.13.
 
 ## Status
 
-**Release candidate v1.1.0.** Sprints 27–30 delivered a persistent
+**Stable v1.1.0; post-v1.1 development underway.** Sprints 27–30 delivered a persistent
 `MemoryStore`, a concrete `SecretProvider` backend, Gemini support, and
 additive workflow evolution. Sprint 31 completed the release-readiness gate;
 see the [v1.1 release audit](docs/release/v1.1-release-audit.md) and
 [`RELEASE_NOTES_v1.1.0.md`](RELEASE_NOTES_v1.1.0.md). The `1.0.0`
 compatibility promise remains intact: ADR-0025 supersedes ADR-0024's original
 `WorkflowStep` changes and restores its exact frozen v1.0 public surface.
+Sprint 32 adds an optional local-model adapter for caller-managed
+OpenAI-compatible endpoints; see
+[ADR-0026](docs/adr/0026-local-provider-openai-compatible-endpoint.md).
 
 Per [ADR-0005](docs/adr/0005-versioning-strategy.md),
 `1.0.0` is reserved for the explicit decision that every responsibility in
@@ -170,16 +174,17 @@ Implemented so far: `core` (exceptions, the
 `ServiceContainer` DI container, structured logging, and the `Kernel`
 runtime/lifecycle), `config` (`KernelConfig`, `Environment`, `load_config`),
 `providers` (the `BaseProvider` contract, `ProviderRegistry`,
-`ProviderFactory`, plus three concrete providers —
+`ProviderFactory`, plus four concrete providers —
 `providers.claude.ClaudeProvider`, backed by the Anthropic Messages API
 (optional, requires `pip install mellivor-kernel[anthropic]`),
 `providers.openai.OpenAIProvider`, backed by the OpenAI Chat Completions
 API (optional, requires `pip install mellivor-kernel[openai]`), and
 `providers.gemini.GeminiProvider`, backed by the Gemini Developer API via
 the `google-genai` SDK (optional, requires `pip install
-mellivor-kernel[gemini]`); none exported from `providers.__all__`, each
-importable explicitly from its own module; no local-model integration
-yet), `tools` (the `BaseTool`
+mellivor-kernel[gemini]`), and `providers.local.LocalProvider`, connecting to
+a caller-managed OpenAI-compatible endpoint (optional, requires `pip install
+mellivor-kernel[local]`); none exported from `providers.__all__`, each
+importable explicitly from its own module), `tools` (the `BaseTool`
 contract, `ToolRegistry`, the permission model, and the
 `ToolExecutionPipeline`, plus three demonstration tools —
 `EchoTool`/`HealthCheckTool`/`VersionTool` — that call no external API),

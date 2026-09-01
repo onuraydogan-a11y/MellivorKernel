@@ -486,6 +486,82 @@ See `tests/test_gemini_provider_integration.py` for the full
 GeminiProvider -> ExecutionResult` flow, mirroring `OpenAIProvider`'s own
 Sprint 23 integration test.
 
+## `LocalProvider` (Sprint 32)
+
+`LocalProvider` is the first post-v1.1 provider. It connects to an explicitly
+configured, already-running OpenAI-compatible Chat Completions endpoint. It
+does not install or manage a runtime, download a model, launch a process,
+probe during import/construction, or fall back to the internet or a cloud
+provider. See [ADR-0026](../adr/0026-local-provider-openai-compatible-endpoint.md).
+
+The provider is imported explicitly from `mellivor_kernel.providers.local`,
+matching the optional-dependency isolation of Claude, OpenAI, and Gemini. It is
+not added to `providers.__all__`, so the v1.1 base import surface remains
+independent of HTTPX.
+
+### Architecture and supported runtimes
+
+The selected protocol is the OpenAI-compatible Chat Completions wire format,
+not an Ollama-native or runtime-specific API. It supports conforming vLLM and
+LM Studio servers and Ollama's compatibility endpoint without coupling the
+kernel to any one runtime. A generic arbitrary-HTTP provider was rejected
+because it has no stable interoperable schema.
+
+### Configuration
+
+| Field | Required | Meaning |
+|---|---|---|
+| `base_url` | **Yes** | Absolute `http`/`https` protocol root, normally ending in `/v1`. The provider appends `/chat/completions`. User information, query parameters, and fragments are rejected. No localhost default exists. |
+| `default_model` | **Yes** | Non-blank model identifier sent with every request. |
+| `api_key` | No | If present, sent as `Authorization: Bearer ...`. No environment or other credential fallback. |
+| `timeout_seconds` | No | HTTPX request timeout; positive through `ProviderConfiguration`. |
+| `max_retries` | No | Bounded retries for timeout/transport failures only; no retries for authentication, HTTP status, validation, or malformed responses. |
+
+`pip install mellivor-kernel[local]` installs the optional
+`httpx>=0.28.1,<1` transport. Base package dependencies remain empty.
+
+### Request and response
+
+```python
+request = {
+    "messages": list[{"role": "system" | "user" | "assistant", "content": str}],
+    "max_tokens": int | None,
+}
+response = {
+    "text": str,
+    "model": str,
+    "finish_reason": str | None,
+    "prompt_tokens": int,
+    "completion_tokens": int,
+}
+```
+
+Messages pass through in order with their OpenAI-compatible roles. Missing
+usage counts normalize to zero. Unsupported request keys are rejected rather
+than silently implying support for runtime-specific behavior.
+
+### Error and health behavior
+
+The additive hierarchy `LocalProviderError`, `LocalAuthenticationError`,
+`LocalTimeoutError`, `LocalConnectionError`, and `LocalResponseError` mirrors
+the provider error model ratified in Sprint 25. Authorization headers, API
+keys, and response bodies never enter translated error messages.
+
+`check_health()` explicitly performs a one-token chat completion and returns a
+`ProviderHealthCheck`; it never raises a translated provider failure. No
+health request occurs unless the caller invokes this method.
+
+### Trust boundary and intentionally unsupported behavior
+
+The configured endpoint is a caller-controlled network destination. Products
+must treat it as privileged configuration and enforce their egress/SSRF policy
+outside the adapter. The kernel validates URL shape but does not resolve DNS or
+decide whether loopback, LAN, or remote private hosts are allowed.
+
+Streaming, tools/functions, structured output, multimodal/vision input,
+embeddings, model discovery/pulling, runtime installation/lifecycle, batching,
+and endpoint failover are intentionally unsupported.
+
 ## v1.0 contract ratification (Sprint 25)
 
 [ADR-0019](../adr/0019-release-readiness-and-scope-lock.md) classified
@@ -523,10 +599,8 @@ with real flags or documented as aspirational. Both are now decided,
 `providers` depends only on `core` (for `KernelError`), matching the
 `config → core` precedent from Sprint 2. `core` has no dependency on
 `providers`. `providers` has no dependency on `config` or any other
-subsystem. `providers/claude.py` additionally depends on the optional
-`anthropic` package, `providers/openai.py` additionally depends on the
-optional `openai` package, and `providers/gemini.py` additionally
-depends on the optional `google-genai` package (which itself depends on
-`httpx`, already present transitively via `anthropic`/`openai`) — each
-the only file in this repository that imports its respective SDK, and
-none depends on either of the others.
+subsystem. Concrete modules own only optional integrations:
+`providers/claude.py` imports `anthropic`, `providers/openai.py` imports
+`openai`, `providers/gemini.py` imports `google-genai`/`httpx`, and
+`providers/local.py` imports `httpx`. None depends on another concrete
+provider, and base package dependencies remain empty.
