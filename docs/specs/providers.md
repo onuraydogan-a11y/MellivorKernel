@@ -374,7 +374,7 @@ including why `google-genai` (not the deprecated
 `OpenAIProvider` already keep from the base `providers` package.
 
 **Optional dependency.** Requires the `google-genai` package:
-`pip install mellivor-kernel[gemini]` (`google-genai>=2.0`).
+`pip install mellivor-kernel[gemini]` (`google-genai>=2.0,<3`).
 `providers/gemini.py` is the only module anywhere in this repository
 that imports `google.genai` — no other kernel code imports this module
 or the SDK, mirroring `claude.py`'s/`openai.py`'s isolation exactly.

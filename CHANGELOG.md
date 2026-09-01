@@ -6,6 +6,26 @@ start at `1.0.0` — no prior release is backfilled here; the pre-1.0 history
 is recorded in [`RELEASE_NOTES_v0.5.0.md`](RELEASE_NOTES_v0.5.0.md) and
 [`docs/architecture/roadmap.md`](docs/architecture/roadmap.md).
 
+## [Unreleased]
+
+Post-v1.1 development. No v1.2 release scope or date has been approved.
+
+### Added
+
+- `LocalProvider`, an additive optional provider for synchronous text chat
+  through a caller-managed OpenAI-compatible endpoint. The provider uses the
+  `local` extra (`httpx>=0.28.1,<1`) and does not install, start, manage, or
+  download a local-model runtime.
+
+### Compatibility
+
+- The v1.1 public API remains unchanged. `LocalProvider` implements the
+  existing `BaseProvider` and `ProviderConfiguration` contracts without
+  modifying existing provider behavior.
+- Deterministic mocked integration covers the documented Chat Completions
+  protocol subset. Compatibility with a specific Ollama, LM Studio, or vLLM
+  installation is not claimed until that runtime is validated separately.
+
 ## [1.1.0] - 2026-08-28
 
 Backward-compatible expansion of the stable v1 API. See

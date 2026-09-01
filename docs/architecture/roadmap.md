@@ -296,7 +296,7 @@ transport-level failures into the same five-class exception shape
 
 | Sprint | Item | Status |
 |---|---|---|
-| 32 | Local model provider (`providers.local.LocalProvider`) | Shipped — OpenAI-compatible endpoint adapter; see [ADR-0026](../adr/0026-local-provider-openai-compatible-endpoint.md) |
+| 32 | Local model provider (`providers.local.LocalProvider`) | Shipped and protocol-validated — see [ADR-0026](../adr/0026-local-provider-openai-compatible-endpoint.md) and the [Sprint 32 validation](../reviews/sprint32-local-provider-validation.md) |
 
 Sprint 32 begins post-v1.1 development without defining a broader v1.2
 roadmap. `LocalProvider` connects only to a caller-managed, already-running
