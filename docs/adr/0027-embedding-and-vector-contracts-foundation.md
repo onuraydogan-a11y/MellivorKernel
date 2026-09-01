@@ -1,6 +1,6 @@
 # 0027. Embedding and vector contracts foundation
 
-Status: Proposed
+Status: Accepted
 Date: 2026-09-02
 
 ## Context
@@ -28,9 +28,9 @@ six contract questions for this ADR: model selection, protocol subset,
 similarity metric, metadata portability, public-export timing, and the second
 backend gate.
 
-This ADR defines an implementation-ready design but authorizes no code. It
-remains `Proposed` until Product Owner approval. No public API, dependency,
-roadmap schedule, or release scope changes while it is Proposed.
+This ADR defines the implementation-ready design approved by the Product Owner
+for an internal, experimental proof. Acceptance does not make the proposed
+types stable public API; the second-backend export gate below remains binding.
 
 ## Decision
 
@@ -607,5 +607,5 @@ the shared contract.
 - No production vector backend is promised until consumer evidence selects
   and validates one.
 - RAG and all business/product policy remain outside Kernel.
-- This ADR remains Proposed and authorizes no implementation until Product
-  Owner approval changes its status to Accepted.
+- This ADR authorizes only the internal experimental proof. Public export and
+  an external backend remain separately gated.

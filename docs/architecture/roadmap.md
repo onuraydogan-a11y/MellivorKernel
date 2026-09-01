@@ -297,7 +297,10 @@ transport-level failures into the same five-class exception shape
 | Sprint | Item | Status |
 |---|---|---|
 | 32 | Local model provider (`providers.local.LocalProvider`) | Shipped and protocol-validated — see [ADR-0026](../adr/0026-local-provider-openai-compatible-endpoint.md) and the [Sprint 32 validation](../reviews/sprint32-local-provider-validation.md) |
-| 33 | v1.2.0 release gate | Passed locally; release commit and CI verification precede Product Owner tag approval — see the [v1.2 release audit](../release/v1.2-release-audit.md) |
+| 33 | v1.2.0 release gate | Complete — `v1.2.0` released; see the [v1.2 release audit](../release/v1.2-release-audit.md) |
+| 34 | Architecture Challenge: embeddings and vector stores | Complete; Product Owner selected partial approval — see the [challenge](../reviews/sprint34-embeddings-vector-store-architecture-challenge.md) |
+| 35 | Embedding and vector contracts foundation ADR | Complete; ADR-0027 accepted before implementation |
+| 36 | Experimental embedding and vector contracts proof | Implemented internally; not a stable v1.x capability — see [ADR-0027](../adr/0027-embedding-and-vector-contracts-foundation.md) and the [experimental specification](../specs/experimental-embeddings-vector.md) |
 
 The approved v1.2.0 line contains only Sprint 32 LocalProvider and its release
 validation; it does not define a broader capability roadmap. `LocalProvider`
@@ -306,3 +309,9 @@ OpenAI-compatible endpoint. It does not install runtimes, download models,
 start processes, or expand `BaseProvider`. Ollama-native lifecycle/model
 management, streaming, tools, multimodal input, and embeddings remain outside
 this release.
+
+Post-release Sprints 34–36 resolved only the architecture question for generic
+embedding and vector seams. Sprint 36 is an internal proof: it does not add
+stable exports, RAG behavior, an external vector database, or a release
+commitment. Any second backend still requires Product Owner approval and
+concrete consumer deployment evidence.
