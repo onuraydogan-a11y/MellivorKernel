@@ -27,9 +27,10 @@ Backward-compatible expansion of the stable v1 API. See
 
 - Provider dependency bounds now declare supported major versions:
   `anthropic>=0.40,<1`, `openai>=1.0,<3`, and `google-genai>=2.0,<3`.
-- CI installs all provider extras. The directly imported test dependency
-  `httpx` is declared in `dev`; it remains absent from base runtime
-  dependencies and is owned at runtime by the `gemini` extra.
+- The directly imported test dependency `httpx` is now declared in `dev`
+  instead of being obtained accidentally through provider SDKs. It remains
+  absent from base runtime dependencies and is owned at runtime by the
+  `gemini` extra. CI continues to install all provider extras.
 
 ### Compatibility correction
 

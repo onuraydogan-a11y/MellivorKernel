@@ -40,8 +40,12 @@ The base package still has no runtime dependency. Provider SDKs remain extras:
 - `openai>=1.0,<3`
 - `google-genai>=2.0,<3` and `httpx>=0.28.1,<1` for `gemini`
 
-CI drift from an undeclared direct `httpx` test import and an incomplete extras
-install was permanently corrected in `6b17370`.
+CI drift came from tests importing HTTPX directly while relying on the
+provider SDKs to supply it transitively. Unbounded provider major versions
+later migrated toward HTTPX 2. Commit `6b17370` permanently corrected the
+model by declaring and bounding HTTPX directly in `dev` and `gemini`, and by
+bounding the supported provider SDK majors; CI already installed every
+provider extra.
 
 ## Upgrade from v1.0.0
 
