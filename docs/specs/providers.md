@@ -499,13 +499,15 @@ matching the optional-dependency isolation of Claude, OpenAI, and Gemini. It is
 not added to `providers.__all__`, so the v1.1 base import surface remains
 independent of HTTPX.
 
-### Architecture and supported runtimes
+### Architecture and protocol portability
 
 The selected protocol is the OpenAI-compatible Chat Completions wire format,
-not an Ollama-native or runtime-specific API. It supports conforming vLLM and
-LM Studio servers and Ollama's compatibility endpoint without coupling the
-kernel to any one runtime. A generic arbitrary-HTTP provider was rejected
-because it has no stable interoperable schema.
+not an Ollama-native or runtime-specific API. It is intended for endpoints
+that implement the documented subset without coupling the kernel to any one
+runtime. Sprint 32 used deterministic protocol mocks and did not certify an
+Ollama, LM Studio, vLLM, or model-specific deployment. A generic
+arbitrary-HTTP provider was rejected because it has no stable interoperable
+schema.
 
 ### Configuration
 

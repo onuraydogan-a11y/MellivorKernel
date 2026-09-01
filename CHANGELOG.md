@@ -6,9 +6,11 @@ start at `1.0.0` — no prior release is backfilled here; the pre-1.0 history
 is recorded in [`RELEASE_NOTES_v0.5.0.md`](RELEASE_NOTES_v0.5.0.md) and
 [`docs/architecture/roadmap.md`](docs/architecture/roadmap.md).
 
-## [Unreleased]
+## [1.2.0] - 2026-09-01
 
-Post-v1.1 development. No v1.2 release scope or date has been approved.
+Backward-compatible local-inference connectivity through the existing
+provider abstraction. See [`RELEASE_NOTES_v1.2.0.md`](RELEASE_NOTES_v1.2.0.md)
+and the [Sprint 33 release audit](docs/release/v1.2-release-audit.md).
 
 ### Added
 
@@ -25,6 +27,15 @@ Post-v1.1 development. No v1.2 release scope or date has been approved.
 - Deterministic mocked integration covers the documented Chat Completions
   protocol subset. Compatibility with a specific Ollama, LM Studio, or vLLM
   installation is not claimed until that runtime is validated separately.
+
+### Known limitations
+
+- Kernel does not install or start local-model runtimes, manage runtime
+  processes, or download models. The caller owns endpoint selection and the
+  complete runtime lifecycle.
+- Runtime-specific behavior and individual model builds were not certified in
+  Sprint 32. Servers that differ from the validated protocol subset may
+  require separate integration validation.
 
 ## [1.1.0] - 2026-08-28
 

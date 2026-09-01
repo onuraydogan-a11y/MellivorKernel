@@ -135,16 +135,16 @@ pull request against `main`, on Python 3.12 and 3.13.
 
 ## Status
 
-**Stable v1.1.0; post-v1.1 development underway.** Sprints 27–30 delivered a persistent
-`MemoryStore`, a concrete `SecretProvider` backend, Gemini support, and
-additive workflow evolution. Sprint 31 completed the release-readiness gate;
-see the [v1.1 release audit](docs/release/v1.1-release-audit.md) and
-[`RELEASE_NOTES_v1.1.0.md`](RELEASE_NOTES_v1.1.0.md). The `1.0.0`
-compatibility promise remains intact: ADR-0025 supersedes ADR-0024's original
-`WorkflowStep` changes and restores its exact frozen v1.0 public surface.
-Sprint 32 adds an optional local-model adapter for caller-managed
-OpenAI-compatible endpoints; see
-[ADR-0026](docs/adr/0026-local-provider-openai-compatible-endpoint.md).
+**v1.2.0 release candidate prepared; tag pending Product Owner approval.**
+The released v1.1 capabilities remain unchanged. Sprint 32 adds the optional
+`LocalProvider` for caller-managed OpenAI-compatible endpoints, and Sprint 33
+completes its release gate; see
+[ADR-0026](docs/adr/0026-local-provider-openai-compatible-endpoint.md), the
+[v1.2 release audit](docs/release/v1.2-release-audit.md), and
+[`RELEASE_NOTES_v1.2.0.md`](RELEASE_NOTES_v1.2.0.md). The adapter was validated
+against the documented protocol subset with deterministic HTTP transports;
+this release does not claim certified interoperability with a particular
+Ollama, LM Studio, vLLM, or model build.
 
 Per [ADR-0005](docs/adr/0005-versioning-strategy.md),
 `1.0.0` is reserved for the explicit decision that every responsibility in

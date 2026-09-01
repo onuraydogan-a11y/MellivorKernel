@@ -115,8 +115,9 @@ management rather than model invocation.
 
 ## Consequences
 
-- Local inference works across Ollama-compatible, vLLM, LM Studio, and other
-  conforming servers through one additive adapter.
+- One additive adapter targets the OpenAI-compatible protocol implemented by
+  multiple caller-managed serving runtimes. Runtime-specific interoperability
+  requires separate validation and is not certified by this decision.
 - Endpoint and runtime ownership remain entirely with the caller.
 - Compatibility is limited to the documented Chat Completions subset; servers
   claiming compatibility but returning a different schema fail explicitly.

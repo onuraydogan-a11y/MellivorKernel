@@ -297,10 +297,12 @@ transport-level failures into the same five-class exception shape
 | Sprint | Item | Status |
 |---|---|---|
 | 32 | Local model provider (`providers.local.LocalProvider`) | Shipped and protocol-validated — see [ADR-0026](../adr/0026-local-provider-openai-compatible-endpoint.md) and the [Sprint 32 validation](../reviews/sprint32-local-provider-validation.md) |
+| 33 | v1.2.0 release gate | Passed locally; release commit and CI verification precede Product Owner tag approval — see the [v1.2 release audit](../release/v1.2-release-audit.md) |
 
-Sprint 32 begins post-v1.1 development without defining a broader v1.2
-roadmap. `LocalProvider` connects only to a caller-managed, already-running
+The approved v1.2.0 line contains only Sprint 32 LocalProvider and its release
+validation; it does not define a broader capability roadmap. `LocalProvider`
+connects only to a caller-managed, already-running
 OpenAI-compatible endpoint. It does not install runtimes, download models,
 start processes, or expand `BaseProvider`. Ollama-native lifecycle/model
 management, streaming, tools, multimodal input, and embeddings remain outside
-this sprint.
+this release.
