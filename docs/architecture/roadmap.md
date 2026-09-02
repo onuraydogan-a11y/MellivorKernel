@@ -301,6 +301,7 @@ transport-level failures into the same five-class exception shape
 | 34 | Architecture Challenge: embeddings and vector stores | Complete; Product Owner selected partial approval — see the [challenge](../reviews/sprint34-embeddings-vector-store-architecture-challenge.md) |
 | 35 | Embedding and vector contracts foundation ADR | Complete; ADR-0027 accepted before implementation |
 | 36 | Experimental embedding and vector contracts proof | Implemented internally; not a stable v1.x capability — see [ADR-0027](../adr/0027-embedding-and-vector-contracts-foundation.md) and the [experimental specification](../specs/experimental-embeddings-vector.md) |
+| 37 | External vector backend consumer evidence and selection | Complete; no backend selected because current consumers do not yet demonstrate a concrete vector-storage need — see the [Sprint 37 review](../reviews/sprint37-external-vector-backend-consumer-evidence.md) |
 
 The approved v1.2.0 line contains only Sprint 32 LocalProvider and its release
 validation; it does not define a broader capability roadmap. `LocalProvider`
@@ -315,3 +316,11 @@ embedding and vector seams. Sprint 36 is an internal proof: it does not add
 stable exports, RAG behavior, an external vector database, or a release
 commitment. Any second backend still requires Product Owner approval and
 concrete consumer deployment evidence.
+
+Sprint 37 audited Mellivor AI Security and Mellivor One as real consumers.
+Mellivor One has an evidence-backed PostgreSQL/database-per-tenant deployment
+direction, making pgvector the first candidate to reassess, but neither product
+currently defines an approved vector workload, scale, extension availability,
+or operational owner. No backend was selected, no implementation ADR was
+created, and ADR-0027's public-export gate remains closed. See the
+[Sprint 37 consumer evidence review](../reviews/sprint37-external-vector-backend-consumer-evidence.md).
