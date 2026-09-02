@@ -302,6 +302,7 @@ transport-level failures into the same five-class exception shape
 | 35 | Embedding and vector contracts foundation ADR | Complete; ADR-0027 accepted before implementation |
 | 36 | Experimental embedding and vector contracts proof | Implemented internally; not a stable v1.x capability — see [ADR-0027](../adr/0027-embedding-and-vector-contracts-foundation.md) and the [experimental specification](../specs/experimental-embeddings-vector.md) |
 | 37 | External vector backend consumer evidence and selection | Complete; no backend selected because current consumers do not yet demonstrate a concrete vector-storage need — see the [Sprint 37 review](../reviews/sprint37-external-vector-backend-consumer-evidence.md) |
+| 38 | Architecture Challenge: agent planning, reasoning, and execution boundary | Complete; planning primitives deferred because no current consumer demonstrates the need — see the [Sprint 38 challenge](../reviews/sprint38-agent-planning-architecture-challenge.md) |
 
 The approved v1.2.0 line contains only Sprint 32 LocalProvider and its release
 validation; it does not define a broader capability roadmap. `LocalProvider`
@@ -324,3 +325,15 @@ currently defines an approved vector workload, scale, extension availability,
 or operational owner. No backend was selected, no implementation ADR was
 created, and ADR-0027's public-export gate remains closed. See the
 [Sprint 37 consumer evidence review](../reviews/sprint37-external-vector-backend-consumer-evidence.md).
+
+Sprint 38 separated static workflow composition, dynamic request resolution,
+runtime plan generation, reasoning/reflection, and autonomous loops. Existing
+agent, workflow, execution, authorization, tool, event, observability, and
+memory seams already provide the deterministic runtime substrate. Current
+consumers use fixed workflows or product-owned agent security policy and do
+not demonstrate an approved planning need. No planning type, autonomous loop,
+public API, or implementation ADR was approved. If consumer evidence emerges,
+the first architecture to test is an injected producer of existing
+`WorkflowDefinition` values, not a second execution model. Multi-agent
+coordination remains separate Future Research. See the
+[Sprint 38 Architecture Challenge](../reviews/sprint38-agent-planning-architecture-challenge.md).
