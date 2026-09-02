@@ -303,6 +303,7 @@ transport-level failures into the same five-class exception shape
 | 36 | Experimental embedding and vector contracts proof | Implemented internally; not a stable v1.x capability — see [ADR-0027](../adr/0027-embedding-and-vector-contracts-foundation.md) and the [experimental specification](../specs/experimental-embeddings-vector.md) |
 | 37 | External vector backend consumer evidence and selection | Complete; no backend selected because current consumers do not yet demonstrate a concrete vector-storage need — see the [Sprint 37 review](../reviews/sprint37-external-vector-backend-consumer-evidence.md) |
 | 38 | Architecture Challenge: agent planning, reasoning, and execution boundary | Complete; planning primitives deferred because no current consumer demonstrates the need — see the [Sprint 38 challenge](../reviews/sprint38-agent-planning-architecture-challenge.md) |
+| 39 | Architecture Challenge: distributed events and message-broker boundary | Complete; distributed delivery remains product/deployment responsibility and no technology or Kernel primitive was selected — see the [Sprint 39 challenge](../reviews/sprint39-distributed-events-message-broker-architecture-challenge.md) |
 
 The approved v1.2.0 line contains only Sprint 32 LocalProvider and its release
 validation; it does not define a broader capability roadmap. `LocalProvider`
@@ -337,3 +338,14 @@ the first architecture to test is an injected producer of existing
 `WorkflowDefinition` values, not a second execution model. Multi-agent
 coordination remains separate Future Research. See the
 [Sprint 38 Architecture Challenge](../reviews/sprint38-agent-planning-architecture-challenge.md).
+
+Sprint 39 distinguished in-process notification, durable event persistence,
+inter-process delivery, cross-service messaging, command/work queues, pub/sub,
+streaming, and event sourcing. The existing `EventBus` remains a synchronous,
+deterministic, dependency-free in-process lifecycle-notification seam. Current
+consumers have product-owned audit, webhook, SIEM, PostgreSQL, and multi-process
+requirements but no need to distribute Kernel lifecycle events. Distributed
+delivery therefore remains product/deployment responsibility; no broker,
+outbox, transport primitive, message envelope, worker, or implementation ADR
+was approved. See the
+[Sprint 39 Architecture Challenge](../reviews/sprint39-distributed-events-message-broker-architecture-challenge.md).
