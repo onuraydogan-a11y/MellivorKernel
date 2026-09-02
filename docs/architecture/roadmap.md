@@ -305,6 +305,7 @@ transport-level failures into the same five-class exception shape
 | 38 | Architecture Challenge: agent planning, reasoning, and execution boundary | Complete; planning primitives deferred because no current consumer demonstrates the need — see the [Sprint 38 challenge](../reviews/sprint38-agent-planning-architecture-challenge.md) |
 | 39 | Architecture Challenge: distributed events and message-broker boundary | Complete; distributed delivery remains product/deployment responsibility and no technology or Kernel primitive was selected — see the [Sprint 39 challenge](../reviews/sprint39-distributed-events-message-broker-architecture-challenge.md) |
 | 40 | Architecture Challenge: observability, metrics, and tracing integration boundary | Complete; existing neutral seams remain authoritative and telemetry adapters stay product/deployment-owned — see the [Sprint 40 challenge](../reviews/sprint40-observability-metrics-tracing-integration-boundary.md) |
+| 41 | v1.x architecture maturity and remaining roadmap review | Complete; v1.x architecture is mature and enters maintenance/evidence-driven evolution — see the [Sprint 41 review](../reviews/sprint41-v1x-architecture-maturity-review.md) |
 
 The approved v1.2.0 line contains only Sprint 32 LocalProvider and its release
 validation; it does not define a broader capability roadmap. `LocalProvider`
@@ -362,3 +363,15 @@ global providers, batching, retention, and adapter lifecycle remain
 product/deployment responsibility. No technology, type, dependency,
 implementation ADR, or public API was approved. See the
 [Sprint 40 Architecture Challenge](../reviews/sprint40-observability-metrics-tracing-integration-boundary.md).
+
+Sprint 41 reconciled every stable subsystem, release from v1.0 through v1.2,
+post-v1.2 experiment, Future Research item, public contract, and concrete debt
+signal. The v1.x architecture is mature for its defined role as a headless AI
+execution and lightweight orchestration kernel. All previously approved
+additive work is shipped; no breaking requirement or approved feature backlog
+remains. The line now enters maintenance and consumer-evidence-driven
+evolution. Experimental embeddings/vector types remain internal until every
+promotion gate passes, product/deployment ownership decisions remain in force,
+and v2.0 opens only for an evidence-backed unavoidable stable-contract break —
+never for age, sprint count, marketing, research, or naming cleanup. See the
+[Sprint 41 maturity review](../reviews/sprint41-v1x-architecture-maturity-review.md).

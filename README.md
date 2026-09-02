@@ -135,8 +135,7 @@ pull request against `main`, on Python 3.12 and 3.13.
 
 ## Status
 
-**v1.2.0 release candidate prepared; tag pending Product Owner approval.**
-The released v1.1 capabilities remain unchanged. Sprint 32 adds the optional
+**v1.2.0 is released.** The v1.1 capabilities remain unchanged. Sprint 32 adds the optional
 `LocalProvider` for caller-managed OpenAI-compatible endpoints, and Sprint 33
 completes its release gate; see
 [ADR-0026](docs/adr/0026-local-provider-openai-compatible-endpoint.md), the
