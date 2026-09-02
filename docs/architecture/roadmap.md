@@ -304,6 +304,7 @@ transport-level failures into the same five-class exception shape
 | 37 | External vector backend consumer evidence and selection | Complete; no backend selected because current consumers do not yet demonstrate a concrete vector-storage need — see the [Sprint 37 review](../reviews/sprint37-external-vector-backend-consumer-evidence.md) |
 | 38 | Architecture Challenge: agent planning, reasoning, and execution boundary | Complete; planning primitives deferred because no current consumer demonstrates the need — see the [Sprint 38 challenge](../reviews/sprint38-agent-planning-architecture-challenge.md) |
 | 39 | Architecture Challenge: distributed events and message-broker boundary | Complete; distributed delivery remains product/deployment responsibility and no technology or Kernel primitive was selected — see the [Sprint 39 challenge](../reviews/sprint39-distributed-events-message-broker-architecture-challenge.md) |
+| 40 | Architecture Challenge: observability, metrics, and tracing integration boundary | Complete; existing neutral seams remain authoritative and telemetry adapters stay product/deployment-owned — see the [Sprint 40 challenge](../reviews/sprint40-observability-metrics-tracing-integration-boundary.md) |
 
 The approved v1.2.0 line contains only Sprint 32 LocalProvider and its release
 validation; it does not define a broader capability roadmap. `LocalProvider`
@@ -349,3 +350,15 @@ delivery therefore remains product/deployment responsibility; no broker,
 outbox, transport primitive, message envelope, worker, or implementation ADR
 was approved. See the
 [Sprint 39 Architecture Challenge](../reviews/sprint39-distributed-events-message-broker-architecture-challenge.md).
+
+Sprint 40 audited structured logging, correlation, metrics, tracing, structured
+observations, health, audit/security events, telemetry lifecycle, and current
+consumer deployments. Mellivor AI Security already adapts Kernel's existing
+`StructuredEventSink` in product code and owns aggregate metrics/health;
+Mellivor One names OpenTelemetry for its future service architecture but does
+not currently deploy it or consume Kernel tracing/metrics contracts. Existing
+neutral seams remain authoritative. SDKs, exporters, collectors, credentials,
+global providers, batching, retention, and adapter lifecycle remain
+product/deployment responsibility. No technology, type, dependency,
+implementation ADR, or public API was approved. See the
+[Sprint 40 Architecture Challenge](../reviews/sprint40-observability-metrics-tracing-integration-boundary.md).
