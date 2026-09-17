@@ -57,3 +57,4 @@ Small, local, easily reversible choices do not need an ADR.
 | [0025](0025-workflow-execution-options-compatibility-repair.md) | Preserve WorkflowStep v1.0 through external execution options | Accepted |
 | [0026](0026-local-provider-openai-compatible-endpoint.md) | Local provider through an OpenAI-compatible endpoint | Accepted |
 | [0027](0027-embedding-and-vector-contracts-foundation.md) | Embedding and vector contracts foundation | Accepted |
+| [0028](0028-provider-tool-calling-and-execution-tool-loop.md) | Provider tool calling and execution-layer tool loop | Proposed |
