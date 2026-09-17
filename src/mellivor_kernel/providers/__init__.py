@@ -18,6 +18,8 @@ from mellivor_kernel.providers.tool_calling import (
     ToolCallingError,
     ToolResultBlock,
     ToolSpec,
+    assistant_message,
+    tool_results_message,
 )
 
 __all__ = [
@@ -34,4 +36,6 @@ __all__ = [
     "ToolCallingError",
     "ToolResultBlock",
     "ToolSpec",
+    "assistant_message",
+    "tool_results_message",
 ]

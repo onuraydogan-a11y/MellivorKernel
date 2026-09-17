@@ -19,7 +19,7 @@ and emit ``response["tool_calls"]``.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 
@@ -122,4 +122,47 @@ class ToolResultBlock:
             raise ToolCallingError("ToolResultBlock.tool_call_id must not be blank.")
 
 
-__all__ = ["ToolCall", "ToolCallingError", "ToolResultBlock", "ToolSpec"]
+def assistant_message(text: str, tool_calls: Sequence[ToolCall]) -> Mapping[str, object]:
+    """Build the provider-neutral assistant turn for a response.
+
+    Content is a block list: an optional ``text`` block followed by one
+    ``tool_use`` block per call. Providers translate this shape to their
+    own wire format when it is replayed on the next request.
+    """
+    blocks: list[Mapping[str, object]] = []
+    if text:
+        blocks.append({"type": "text", "text": text})
+    for call in tool_calls:
+        blocks.append(
+            {"type": "tool_use", "id": call.id, "name": call.name, "input": call.arguments}
+        )
+    return {"role": "assistant", "content": tuple(blocks)}
+
+
+def tool_results_message(results: Sequence[ToolResultBlock]) -> Mapping[str, object]:
+    """Build the provider-neutral user turn carrying tool results.
+
+    Content is a block list of ``tool_result`` entries, one per result.
+    """
+    if not results:
+        raise ToolCallingError("tool_results_message requires at least one result.")
+    blocks = tuple(
+        {
+            "type": "tool_result",
+            "tool_call_id": result.tool_call_id,
+            "content": result.content,
+            "is_error": result.is_error,
+        }
+        for result in results
+    )
+    return {"role": "user", "content": blocks}
+
+
+__all__ = [
+    "ToolCall",
+    "ToolCallingError",
+    "ToolResultBlock",
+    "ToolSpec",
+    "assistant_message",
+    "tool_results_message",
+]
