@@ -515,9 +515,9 @@ def test_end_to_end_with_tool_call_loop() -> None:
     engine = ExecutionEngine(Dispatcher(tools, providers))
     settings = _Settings()
     context = ExecutionContext(
-        configuration=settings,  # type: ignore[arg-type]
+        configuration=settings,
         logger=get_logger("test_claude_e2e"),
-        runtime=Kernel(settings),  # type: ignore[arg-type]
+        runtime=Kernel(settings),
         services=ServiceContainer(),
     )
 

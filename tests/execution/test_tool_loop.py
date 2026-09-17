@@ -31,7 +31,7 @@ from mellivor_kernel.providers import (
     ToolCall,
     ToolSpec,
 )
-from mellivor_kernel.tools import ToolRegistry
+from mellivor_kernel.tools import ToolContext, ToolRegistry, ToolResult
 from mellivor_kernel.tools.builtin import EchoTool
 
 
@@ -91,7 +91,7 @@ class _FailingTool(EchoTool):
     def id(self) -> str:
         return "failing"
 
-    def execute(self, context, request):  # type: ignore[no-untyped-def,override]
+    def execute(self, context: ToolContext, request: Mapping[str, object]) -> ToolResult:
         raise RuntimeError("boom")
 
 
@@ -124,9 +124,9 @@ def _harness(responses: list[Mapping[str, object]], **provider_kwargs: object) -
     loop = ToolCallLoop(engine, tools, providers, event_bus=bus)
     settings = _FakeSettings()
     context = ExecutionContext(
-        configuration=settings,  # type: ignore[arg-type]
+        configuration=settings,
         logger=get_logger("test_tool_loop"),
-        runtime=Kernel(settings),  # type: ignore[arg-type]
+        runtime=Kernel(settings),
         services=ServiceContainer(),
     )
     harness = _Harness(loop=loop, provider=provider, context=context, bus=bus)

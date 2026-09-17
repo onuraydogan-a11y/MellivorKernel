@@ -102,12 +102,12 @@ def test_input_schema_defaults_to_empty_object_without_override() -> None:
     from mellivor_kernel.tools import BaseTool
 
     class _Minimal(BaseTool):
-        id = "minimal"  # type: ignore[assignment]
-        name = "Minimal"  # type: ignore[assignment]
-        version = "1.0.0"  # type: ignore[assignment]
-        description = "A tool with no declared inputs."  # type: ignore[assignment]
-        capabilities = frozenset()  # type: ignore[assignment]
-        permissions = frozenset()  # type: ignore[assignment]
+        id = "minimal"
+        name = "Minimal"
+        version = "1.0.0"
+        description = "A tool with no declared inputs."
+        capabilities = frozenset()
+        permissions = frozenset()
 
         def validate(self, request):  # type: ignore[no-untyped-def]
             return None
