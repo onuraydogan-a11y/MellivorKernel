@@ -22,8 +22,13 @@ from collections.abc import Mapping
 from typing import cast
 
 import openai
-from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
 
+from mellivor_kernel.providers._chat_completions import (
+    messages_to_chat,
+    tool_calls_from_chat,
+    tools_to_chat,
+)
 from mellivor_kernel.providers.base import BaseProvider
 from mellivor_kernel.providers.capabilities import ProviderCapabilities
 from mellivor_kernel.providers.configuration import ProviderConfiguration
@@ -130,10 +135,11 @@ class OpenAIProvider(BaseProvider):
     def capabilities(self) -> ProviderCapabilities:
         """The capabilities this provider supports.
 
-        All ``False``/``None`` beyond the defaults: this sprint's scope is
-        synchronous plain-text request/response only.
+        ``supports_tool_calls`` is ``True``: :meth:`invoke` forwards
+        ``request["tools"]`` as function tools and reports the model's
+        calls in ``response["tool_calls"]``.
         """
-        return ProviderCapabilities()
+        return ProviderCapabilities(supports_tool_calls=True)
 
     def check_health(self) -> ProviderHealthCheck:
         """Check whether the OpenAI API is currently reachable and usable.
@@ -157,18 +163,23 @@ class OpenAIProvider(BaseProvider):
         return ProviderHealthCheck(healthy=True, provider_name=self.name)
 
     def invoke(self, request: Mapping[str, object]) -> Mapping[str, object]:
-        """Send a multi-turn message list to OpenAI and return its plain text response.
+        """Send a message list to OpenAI and return its response.
 
         Args:
-            request: ``{"messages": list[{"role": str, "content": str}]}``
-                (required, non-empty -- a system prompt is an ordinary
-                message with ``role: "system"``, OpenAI's own convention);
-                optionally ``{"max_tokens": int}`` to override the default
-                of ``1024``.
+            request: ``{"messages": [...]}`` (required, non-empty): a
+                conversation in the provider-neutral shape -- each message
+                has ``role`` (``system``/``user``/``assistant``) and
+                ``content``, a string or a block list of
+                ``text``/``tool_use``/``tool_result`` entries. Optionally
+                ``{"system": str}`` (prepended as a system message),
+                ``{"max_tokens": int}`` (default ``1024``), and
+                ``{"tools": [ToolSpec, ...]}`` to offer function tools.
 
         Returns:
-            ``{"text": str, "model": str, "finish_reason": str | None,
-            "prompt_tokens": int, "completion_tokens": int}``.
+            ``{"text": str, "tool_calls": tuple[ToolCall, ...], "model": str,
+            "finish_reason": str | None, "prompt_tokens": int,
+            "completion_tokens": int}``. ``text`` may be empty when the
+            model only asked for tools.
 
         Raises:
             OpenAIProviderError: If ``request`` is malformed, or for any
@@ -180,21 +191,27 @@ class OpenAIProvider(BaseProvider):
             OpenAITimeoutError: If the request times out.
             OpenAIConnectionError: If the request cannot be completed due
                 to a network failure.
-            OpenAIResponseError: If the response contains no text content.
+            OpenAIResponseError: If the response contains neither text nor
+                a tool call, or a tool call cannot be parsed.
         """
-        messages = self._validate_messages(request.get("messages"))
-
+        messages = messages_to_chat(
+            request.get("messages"), system=request.get("system"), error=OpenAIProviderError
+        )
         max_tokens = request.get("max_tokens", _DEFAULT_MAX_TOKENS)
         if not isinstance(max_tokens, int) or isinstance(max_tokens, bool) or max_tokens <= 0:
             raise OpenAIProviderError(
                 "request['max_tokens'] must be a positive integer, if provided."
             )
+        tools = tools_to_chat(request.get("tools"), error=OpenAIProviderError)
 
         try:
             completion = self._client.chat.completions.create(
                 model=self._model,
                 max_tokens=max_tokens,
                 messages=cast("list[ChatCompletionMessageParam]", messages),
+                tools=cast("list[ChatCompletionToolParam]", tools)
+                if tools is not None
+                else openai.omit,
             )
         except openai.AuthenticationError as exc:
             raise OpenAIAuthenticationError(
@@ -208,41 +225,15 @@ class OpenAIProvider(BaseProvider):
             raise OpenAIProviderError(f"OpenAI API request failed: {exc}") from exc
 
         choice = completion.choices[0]
-        text = choice.message.content
-        if not text:
+        text = choice.message.content or ""
+        tool_calls = tool_calls_from_chat(choice.message.tool_calls, error=OpenAIResponseError)
+        if not text and not tool_calls:
             raise OpenAIResponseError("OpenAI response contained no text content.")
-
         return {
             "text": text,
+            "tool_calls": tool_calls,
             "model": completion.model,
             "finish_reason": choice.finish_reason,
             "prompt_tokens": completion.usage.prompt_tokens if completion.usage else 0,
             "completion_tokens": completion.usage.completion_tokens if completion.usage else 0,
         }
-
-    def _validate_messages(self, messages: object) -> list[dict[str, str]]:
-        """Validate and normalize `request["messages"]`.
-
-        Raises:
-            OpenAIProviderError: If `messages` is missing, empty, or any
-                entry is not a mapping with string `role`/`content`.
-        """
-        if not isinstance(messages, list) or not messages:
-            raise OpenAIProviderError("request['messages'] must be a non-empty list.")
-
-        normalized: list[dict[str, str]] = []
-        for entry in messages:
-            if not isinstance(entry, Mapping):
-                raise OpenAIProviderError("Each entry in request['messages'] must be a mapping.")
-            role = entry.get("role")
-            content = entry.get("content")
-            if not isinstance(role, str) or not role.strip():
-                raise OpenAIProviderError(
-                    "Each entry in request['messages'] must have a non-empty string 'role'."
-                )
-            if not isinstance(content, str):
-                raise OpenAIProviderError(
-                    "Each entry in request['messages'] must have a string 'content'."
-                )
-            normalized.append({"role": role, "content": content})
-        return normalized

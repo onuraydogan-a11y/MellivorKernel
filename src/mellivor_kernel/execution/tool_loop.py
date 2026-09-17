@@ -305,7 +305,7 @@ class ToolCallLoop:
         specs: Sequence[ToolSpec],
         opts: ToolLoopOptions,
     ) -> Mapping[str, object]:
-        payload: dict[str, object] = {"messages": tuple(history), "tools": tuple(specs)}
+        payload: dict[str, object] = {"messages": list(history), "tools": tuple(specs)}
         if opts.system is not None:
             payload["system"] = opts.system
         if opts.max_tokens is not None:

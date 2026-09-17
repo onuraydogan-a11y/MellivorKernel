@@ -176,7 +176,7 @@ def test_executes_tool_and_feeds_result_back() -> None:
     assert "ping" in result.tool_calls[0].result
 
     second = h.provider.requests[1]["messages"]
-    assert isinstance(second, tuple)
+    assert isinstance(second, list)
     assert second[-2]["role"] == "assistant"
     assert second[-2]["content"][1]["type"] == "tool_use"
     assert second[-1]["role"] == "user"
