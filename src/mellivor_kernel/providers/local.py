@@ -12,6 +12,11 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from mellivor_kernel.providers._chat_completions import (
+    messages_to_chat,
+    tool_calls_from_chat,
+    tools_to_chat,
+)
 from mellivor_kernel.providers.base import BaseProvider
 from mellivor_kernel.providers.capabilities import ProviderCapabilities
 from mellivor_kernel.providers.configuration import ProviderConfiguration
@@ -19,8 +24,14 @@ from mellivor_kernel.providers.exceptions import ProviderConfigurationError, Pro
 from mellivor_kernel.providers.health import ProviderHealthCheck
 
 _DEFAULT_MAX_TOKENS = 1024
-_ALLOWED_ROLES = frozenset({"system", "user", "assistant"})
-_SUPPORTED_REQUEST_FIELDS = frozenset({"messages", "max_tokens"})
+_SUPPORTED_REQUEST_FIELDS = frozenset({"messages", "max_tokens", "system", "tools"})
+_TOOL_CALLS_EXTRA = "supports_tool_calls"
+"""``ProviderConfiguration.extra`` key that opts a local endpoint into tool
+calling. Off by default: whether an OpenAI-compatible server honours
+``tools`` depends on the served model and the server's own flags (for
+example vLLM's ``--enable-auto-tool-choice``), which the kernel cannot
+detect. The operator who knows the deployment sets it.
+"""
 _AUTHENTICATION_STATUS_CODES = frozenset({401, 403})
 
 
@@ -90,8 +101,15 @@ class LocalProvider(BaseProvider):
 
     @property
     def capabilities(self) -> ProviderCapabilities:
-        """Describe the deliberately minimal synchronous text capability."""
-        return ProviderCapabilities()
+        """Synchronous text, plus tool calling when the configuration opts in.
+
+        ``supports_tool_calls`` mirrors ``configuration.extra["supports_tool_calls"]``
+        (default ``False``). :meth:`invoke` translates ``tools`` regardless;
+        the flag is what the execution layer checks before offering any.
+        """
+        return ProviderCapabilities(
+            supports_tool_calls=bool(self.configuration.extra.get(_TOOL_CALLS_EXTRA, False))
+        )
 
     def check_health(self) -> ProviderHealthCheck:
         """Perform an explicit one-token generation health check; never raise."""
@@ -109,9 +127,11 @@ class LocalProvider(BaseProvider):
     def invoke(self, request: Mapping[str, object]) -> Mapping[str, object]:
         """Generate text through the configured Chat Completions endpoint.
 
-        Supported request keys are ``messages`` and optional ``max_tokens``.
-        Messages support only the ``system``, ``user``, and ``assistant``
-        roles with text content.
+        Supported request keys are ``messages`` (provider-neutral shape:
+        ``system``/``user``/``assistant`` roles, string or block content),
+        and optional ``max_tokens``, ``system`` and ``tools``. The response
+        carries ``text`` and ``tool_calls``; ``text`` may be empty when the
+        model only asked for tools.
         """
         unknown = sorted(set(request) - _SUPPORTED_REQUEST_FIELDS)
         if unknown:
@@ -119,21 +139,25 @@ class LocalProvider(BaseProvider):
                 f"Unsupported local-provider request field(s): {', '.join(unknown)}."
             )
 
-        messages = _validate_messages(request.get("messages"))
+        messages = messages_to_chat(
+            request.get("messages"), system=request.get("system"), error=LocalProviderError
+        )
         max_tokens = request.get("max_tokens", _DEFAULT_MAX_TOKENS)
         if not isinstance(max_tokens, int) or isinstance(max_tokens, bool) or max_tokens <= 0:
             raise LocalProviderError(
                 "request['max_tokens'] must be a positive integer, if provided."
             )
+        tools = tools_to_chat(request.get("tools"), error=LocalProviderError)
 
-        response = self._post(
-            {
-                "model": self._model,
-                "messages": messages,
-                "max_tokens": max_tokens,
-                "stream": False,
-            }
-        )
+        payload: dict[str, object] = {
+            "model": self._model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "stream": False,
+        }
+        if tools is not None:
+            payload["tools"] = tools
+        response = self._post(payload)
         if response.status_code in _AUTHENTICATION_STATUS_CODES:
             raise LocalAuthenticationError(
                 f"Local inference endpoint rejected the configured credential "
@@ -180,23 +204,6 @@ def _chat_completions_endpoint(base_url: str) -> str:
     return f"{base_url.rstrip('/')}/chat/completions"
 
 
-def _validate_messages(messages: object) -> list[dict[str, str]]:
-    if not isinstance(messages, list) or not messages:
-        raise LocalProviderError("request['messages'] must be a non-empty list.")
-    normalized: list[dict[str, str]] = []
-    for entry in messages:
-        if not isinstance(entry, Mapping):
-            raise LocalProviderError("Each entry in request['messages'] must be a mapping.")
-        role = entry.get("role")
-        content = entry.get("content")
-        if not isinstance(role, str) or role not in _ALLOWED_ROLES:
-            raise LocalProviderError("Each message role must be one of: system, user, assistant.")
-        if not isinstance(content, str):
-            raise LocalProviderError("Each message must have string content.")
-        normalized.append({"role": role, "content": content})
-    return normalized
-
-
 def _normalize_response(response: httpx.Response) -> Mapping[str, object]:
     try:
         payload = response.json()
@@ -210,10 +217,14 @@ def _normalize_response(response: httpx.Response) -> Mapping[str, object]:
         raise LocalResponseError("Local inference response contained no usable choice.")
     choice = choices[0]
     message = choice.get("message")
-    if not isinstance(message, Mapping) or not isinstance(message.get("content"), str):
+    if not isinstance(message, Mapping):
         raise LocalResponseError("Local inference response contained no text content.")
-    text = message["content"]
-    if not text:
+    raw_text = message.get("content")
+    if raw_text is not None and not isinstance(raw_text, str):
+        raise LocalResponseError("Local inference response field 'content' must be a string.")
+    text = raw_text or ""
+    tool_calls = tool_calls_from_chat(message.get("tool_calls"), error=LocalResponseError)
+    if not text and not tool_calls:
         raise LocalResponseError("Local inference response contained no text content.")
 
     model = payload.get("model", "")
@@ -236,6 +247,7 @@ def _normalize_response(response: httpx.Response) -> Mapping[str, object]:
     completion_tokens = _token_count(usage.get("completion_tokens", 0), "completion_tokens")
     return {
         "text": text,
+        "tool_calls": tool_calls,
         "model": model,
         "finish_reason": finish_reason,
         "prompt_tokens": prompt_tokens,

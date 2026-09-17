@@ -132,6 +132,7 @@ def test_provider_dispatch_through_the_dispatcher() -> None:
     assert result.success is True
     assert result.payload == {
         "text": "The capital of France is Paris.",
+        "tool_calls": (),
         "model": "claude-sonnet-5",
         "stop_reason": "end_turn",
         "input_tokens": 12,

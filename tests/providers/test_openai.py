@@ -137,7 +137,7 @@ def test_name_and_capabilities() -> None:
 
     assert provider.name == "openai"
     assert provider.capabilities.supports_streaming is False
-    assert provider.capabilities.supports_tool_calls is False
+    assert provider.capabilities.supports_tool_calls is True
 
 
 # -- successful completion -----------------------------------------------------
@@ -151,6 +151,7 @@ def test_successful_completion_returns_text_and_metadata() -> None:
 
     assert result == {
         "text": "hi there",
+        "tool_calls": (),
         "model": "gpt-4o",
         "finish_reason": "stop",
         "prompt_tokens": 10,
@@ -342,3 +343,74 @@ def test_check_health_reports_unhealthy_on_failure() -> None:
     assert report.healthy is False
     assert report.provider_name == "openai"
     assert "invalid api key" in report.detail
+
+
+# --- tool calling ---------------------------------------------------------
+
+from openai.types.chat.chat_completion_message_tool_call import (  # noqa: E402
+    ChatCompletionMessageToolCall,
+    Function,
+)
+
+from mellivor_kernel.providers import ToolCall, ToolSpec  # noqa: E402
+
+
+def test_tools_and_system_are_forwarded_and_tool_calls_parsed() -> None:
+    completion = ChatCompletion(
+        id="chatcmpl_2",
+        choices=[
+            Choice(
+                finish_reason="tool_calls",
+                index=0,
+                message=ChatCompletionMessage(
+                    role="assistant",
+                    content=None,
+                    tool_calls=[
+                        ChatCompletionMessageToolCall(
+                            id="call_1",
+                            type="function",
+                            function=Function(name="echo", arguments='{"message": "x"}'),
+                        )
+                    ],
+                ),
+            )
+        ],
+        created=0,
+        model="gpt-4o",
+        object="chat.completion",
+        usage=CompletionUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+    )
+    fake = _FakeClient(response=completion)
+    provider = OpenAIProvider(_config(), client=_as_client(fake))
+
+    result = provider.invoke(
+        {
+            "messages": [{"role": "user", "content": "hi"}],
+            "system": "be terse",
+            "tools": [ToolSpec(name="echo", description="Echo.")],
+        }
+    )
+
+    sent = fake.chat.completions.calls[0]
+    assert sent["messages"] == [
+        {"role": "system", "content": "be terse"},
+        {"role": "user", "content": "hi"},
+    ]
+    assert sent["tools"] == [
+        {
+            "type": "function",
+            "function": {"name": "echo", "description": "Echo.", "parameters": {"type": "object"}},
+        }
+    ]
+    assert result["text"] == ""
+    assert result["finish_reason"] == "tool_calls"
+    assert result["tool_calls"] == (ToolCall(id="call_1", name="echo", arguments={"message": "x"}),)
+
+
+def test_tools_are_omitted_when_not_offered() -> None:
+    fake = _FakeClient(response=_make_completion())
+    provider = OpenAIProvider(_config(), client=_as_client(fake))
+
+    provider.invoke({"messages": [{"role": "user", "content": "hi"}]})
+
+    assert fake.chat.completions.calls[0]["tools"] is openai.omit

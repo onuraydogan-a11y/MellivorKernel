@@ -13,6 +13,14 @@ from mellivor_kernel.providers.exceptions import (
 from mellivor_kernel.providers.factory import ProviderFactory
 from mellivor_kernel.providers.health import ProviderHealthCheck
 from mellivor_kernel.providers.registry import ProviderRegistry
+from mellivor_kernel.providers.tool_calling import (
+    ToolCall,
+    ToolCallingError,
+    ToolResultBlock,
+    ToolSpec,
+    assistant_message,
+    tool_results_message,
+)
 
 __all__ = [
     "BaseProvider",
@@ -24,4 +32,10 @@ __all__ = [
     "ProviderHealthCheck",
     "ProviderRegistrationError",
     "ProviderRegistry",
+    "ToolCall",
+    "ToolCallingError",
+    "ToolResultBlock",
+    "ToolSpec",
+    "assistant_message",
+    "tool_results_message",
 ]

@@ -70,3 +70,56 @@ class ExecutionFailed(Event):
     operation: str
     error: str
     stage: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ToolCallRequested(Event):
+    """Published by :class:`ToolCallLoop` when a model asks for a tool.
+
+    Attributes:
+        loop_id: The loop run's id, for correlating the calls of one run.
+        tool_call_id: The provider-issued id of the call.
+        tool_id: The tool the model asked for.
+        iteration: The 1-based provider round the call arrived in.
+    """
+
+    loop_id: str
+    tool_call_id: str
+    tool_id: str
+    iteration: int
+
+
+@dataclass(frozen=True, slots=True)
+class ToolCallCompleted(Event):
+    """Published when a requested tool call was executed (success or not).
+
+    Attributes:
+        loop_id: The loop run's id.
+        tool_call_id: The provider-issued id of the call.
+        tool_id: The tool that ran.
+        success: Whether the tool execution succeeded.
+    """
+
+    loop_id: str
+    tool_call_id: str
+    tool_id: str
+    success: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ToolCallRejected(Event):
+    """Published when a requested tool call was refused before execution,
+    either because the model asked for a tool outside the offered set or
+    because the loop's ``before_tool_call`` hook declined it.
+
+    Attributes:
+        loop_id: The loop run's id.
+        tool_call_id: The provider-issued id of the call.
+        tool_id: The tool the model asked for.
+        reason: Why it was refused.
+    """
+
+    loop_id: str
+    tool_call_id: str
+    tool_id: str
+    reason: str

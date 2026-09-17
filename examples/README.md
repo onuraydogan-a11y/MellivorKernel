@@ -22,6 +22,10 @@ examples never become a dependency of the kernel itself.
   `ExecutionEngine` and `AuthorizationEngine`: a single handler subscribes
   to every event type and prints the full lifecycle sequence, correlated
   by `request_id`, for both outcomes.
+- [`execution_tool_call_loop.py`](execution_tool_call_loop.py) — model-driven
+  tool selection through `ToolCallLoop` (ADR-0028): a scripted provider
+  asks for the `echo` tool, the loop executes it through `ExecutionEngine`,
+  feeds the result back, and returns the model's final answer.
 - [`plugin_system_info.py`](plugin_system_info.py) — the `SystemInfoPlugin`
   built-in plugin (Sprint 20) driven through the complete Plugin SDK +
   Plugin Runtime path: `PluginBuilder` builds a manifest, `PluginLoader`

@@ -21,7 +21,14 @@ from mellivor_kernel.execution.context import ExecutionContext
 from mellivor_kernel.execution.contracts import AuthorizationOutcome, Authorizer
 from mellivor_kernel.execution.dispatch import Dispatcher
 from mellivor_kernel.execution.engine import ExecutionEngine
-from mellivor_kernel.execution.events import ExecutionCompleted, ExecutionFailed, ExecutionStarted
+from mellivor_kernel.execution.events import (
+    ExecutionCompleted,
+    ExecutionFailed,
+    ExecutionStarted,
+    ToolCallCompleted,
+    ToolCallRejected,
+    ToolCallRequested,
+)
 from mellivor_kernel.execution.exceptions import (
     DispatchError,
     ExecutionError,
@@ -29,8 +36,19 @@ from mellivor_kernel.execution.exceptions import (
 )
 from mellivor_kernel.execution.request import ExecutionRequest, ExecutionTarget
 from mellivor_kernel.execution.result import ExecutionResult
+from mellivor_kernel.execution.tool_loop import (
+    ALLOW,
+    ProviderCapabilityError,
+    ToolCallDecision,
+    ToolCallLoop,
+    ToolCallRecord,
+    ToolLoopError,
+    ToolLoopOptions,
+    ToolLoopResult,
+)
 
 __all__ = [
+    "ALLOW",
     "AuthorizationOutcome",
     "Authorizer",
     "DispatchError",
@@ -45,4 +63,14 @@ __all__ = [
     "ExecutionStarted",
     "ExecutionTarget",
     "ExecutionValidationError",
+    "ProviderCapabilityError",
+    "ToolCallCompleted",
+    "ToolCallDecision",
+    "ToolCallLoop",
+    "ToolCallRecord",
+    "ToolCallRejected",
+    "ToolCallRequested",
+    "ToolLoopError",
+    "ToolLoopOptions",
+    "ToolLoopResult",
 ]

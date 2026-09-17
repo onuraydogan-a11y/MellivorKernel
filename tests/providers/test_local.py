@@ -139,6 +139,7 @@ def test_success_maps_messages_model_endpoint_and_usage() -> None:
 
     assert result == {
         "text": "hello",
+        "tool_calls": (),
         "model": "qwen-local",
         "finish_reason": "stop",
         "prompt_tokens": 7,
@@ -181,7 +182,7 @@ def test_default_max_tokens_and_missing_usage_normalize() -> None:
         {"messages": [{"role": "user", "content": 1}]},
         {"messages": [{"role": "user", "content": "x"}], "max_tokens": True},
         {"messages": [{"role": "user", "content": "x"}], "max_tokens": 0},
-        {"messages": [{"role": "user", "content": "x"}], "tools": []},
+        {"messages": [{"role": "user", "content": "x"}], "stream": True},
     ],
 )
 def test_rejects_malformed_or_unsupported_requests(payload: dict[str, object]) -> None:
@@ -304,3 +305,71 @@ def test_module_contains_no_process_or_runtime_management() -> None:
     assert "os.system" not in source
     assert "eval(" not in source
     assert "exec(" not in source
+
+
+# --- tool calling ---------------------------------------------------------
+
+
+def test_tool_calls_capability_is_opt_in_via_extra() -> None:
+    off = _provider(lambda _r: httpx.Response(200, json=_response()))
+    on = _provider(
+        lambda _r: httpx.Response(200, json=_response()), extra={"supports_tool_calls": True}
+    )
+
+    assert off.capabilities.supports_tool_calls is False
+    assert on.capabilities.supports_tool_calls is True
+
+
+def test_tools_and_system_are_sent_and_tool_calls_are_parsed() -> None:
+    from mellivor_kernel.providers import ToolCall, ToolSpec
+
+    seen: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(_json(request))
+        body = _response(text="")
+        body["choices"][0]["message"]["content"] = None  # type: ignore[index]
+        body["choices"][0]["message"]["tool_calls"] = [  # type: ignore[index]
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "echo", "arguments": '{"m": 1}'},
+            }
+        ]
+        body["choices"][0]["finish_reason"] = "tool_calls"  # type: ignore[index]
+        return httpx.Response(200, json=body)
+
+    provider = _provider(handler, extra={"supports_tool_calls": True})
+
+    result = provider.invoke(
+        {
+            "messages": [{"role": "user", "content": "hi"}],
+            "system": "be terse",
+            "tools": [ToolSpec(name="echo", description="Echo.")],
+        }
+    )
+
+    assert seen[0]["messages"] == [
+        {"role": "system", "content": "be terse"},
+        {"role": "user", "content": "hi"},
+    ]
+    assert seen[0]["tools"] == [
+        {
+            "type": "function",
+            "function": {"name": "echo", "description": "Echo.", "parameters": {"type": "object"}},
+        }
+    ]
+    assert result["text"] == ""
+    assert result["tool_calls"] == (ToolCall(id="call_1", name="echo", arguments={"m": 1}),)
+
+
+def test_no_tools_key_is_sent_when_none_offered() -> None:
+    seen: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(_json(request))
+        return httpx.Response(200, json=_response())
+
+    _provider(handler).invoke({"messages": [{"role": "user", "content": "hi"}]})
+
+    assert "tools" not in seen[0]

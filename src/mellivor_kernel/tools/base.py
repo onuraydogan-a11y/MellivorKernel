@@ -55,6 +55,18 @@ class BaseTool(ABC):
         """The permissions this tool requires to execute."""
         ...
 
+    @property
+    def input_schema(self) -> Mapping[str, object]:
+        """A JSON Schema object describing this tool's request arguments.
+
+        Optional and non-abstract so that tools written against the v1.0
+        contract need no change. The default declares an object with no
+        properties, which lets a model call the tool but tells it nothing
+        about arguments -- tools that are offered to a model should
+        override this with a real schema.
+        """
+        return {"type": "object"}
+
     def metadata(self) -> ToolMetadata:
         """Return a snapshot of this tool's identity and requirements.
 
