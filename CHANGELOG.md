@@ -6,6 +6,58 @@ start at `1.0.0` — no prior release is backfilled here; the pre-1.0 history
 is recorded in [`RELEASE_NOTES_v0.5.0.md`](RELEASE_NOTES_v0.5.0.md) and
 [`docs/architecture/roadmap.md`](docs/architecture/roadmap.md).
 
+## [1.3.0] - 2026-09-17
+
+Backward-compatible tool calling: a model may choose which kernel tools to
+call, and the kernel executes them through its existing authorization and
+pipeline path. See [ADR-0028](docs/adr/0028-provider-tool-calling-and-execution-tool-loop.md)
+and [`RELEASE_NOTES_v1.3.0.md`](RELEASE_NOTES_v1.3.0.md).
+
+### Added
+
+- `providers.tool_calling`: SDK-free `ToolSpec`, `ToolCall`,
+  `ToolResultBlock`, `ToolCallingError`, and the `assistant_message` /
+  `tool_results_message` builders that define the provider-neutral message
+  shape (string content, or `text` / `tool_use` / `tool_result` blocks).
+- `execution.tool_loop.ToolCallLoop`: runs a model-with-tools conversation
+  to a final answer. Every provider invocation and tool execution goes
+  through `ExecutionEngine`; the offered tools are a mandatory allowlist;
+  `ToolLoopOptions` carries `max_iterations` (default 8), `system`,
+  `max_tokens` and a `before_tool_call` hook (default: allow). Refused
+  calls are returned to the model as error results. Exhaustion is reported
+  (`ToolLoopResult.exhausted`), not raised.
+- Execution events `ToolCallRequested`, `ToolCallCompleted`,
+  `ToolCallRejected`.
+- `BaseTool.input_schema`: optional, non-abstract, default
+  `{"type": "object"}`.
+- `ClaudeProvider`: accepts `messages` (neutral shape) as an alternative to
+  `prompt`, and `tools`; returns `tool_calls`. `supports_tool_calls=True`.
+- `OpenAIProvider`: accepts `system` and `tools`, block-content messages;
+  returns `tool_calls`. `supports_tool_calls=True`.
+- `LocalProvider`: accepts `system` and `tools`, block-content messages;
+  returns `tool_calls`. `supports_tool_calls` is opt-in via
+  `ProviderConfiguration.extra["supports_tool_calls"]`.
+
+### Changed
+
+- A provider response that carries tool calls but no text no longer raises
+  the provider's "no text content" error; it returns `text=""` with the
+  calls. Only the previous error path is affected.
+- `OpenAIProvider` and `LocalProvider` accept `messages` as any sequence,
+  not only a `list`.
+- Provider responses gain a `tool_calls` key (empty tuple when none).
+  Callers that compared the whole response mapping for equality must
+  include it.
+
+### Compatibility
+
+- The v1.2 public API remains unchanged: no abstract method added, no
+  signature or type changed, nothing removed. Existing `{"prompt": ...}`
+  and string-content `{"messages": ...}` callers behave as before.
+- `GeminiProvider` is unchanged and does not declare tool-call support.
+- Third-party providers that do not set `supports_tool_calls` are refused
+  by `ToolCallLoop` before any request; they keep working everywhere else.
+
 ## [1.2.0] - 2026-09-01
 
 Backward-compatible local-inference connectivity through the existing

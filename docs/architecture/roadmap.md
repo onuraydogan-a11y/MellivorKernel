@@ -306,6 +306,7 @@ transport-level failures into the same five-class exception shape
 | 39 | Architecture Challenge: distributed events and message-broker boundary | Complete; distributed delivery remains product/deployment responsibility and no technology or Kernel primitive was selected — see the [Sprint 39 challenge](../reviews/sprint39-distributed-events-message-broker-architecture-challenge.md) |
 | 40 | Architecture Challenge: observability, metrics, and tracing integration boundary | Complete; existing neutral seams remain authoritative and telemetry adapters stay product/deployment-owned — see the [Sprint 40 challenge](../reviews/sprint40-observability-metrics-tracing-integration-boundary.md) |
 | 41 | v1.x architecture maturity and remaining roadmap review | Complete; v1.x architecture is mature and enters maintenance/evidence-driven evolution — see the [Sprint 41 review](../reviews/sprint41-v1x-architecture-maturity-review.md) |
+| 42 | Tool calling (provider contract + execution-layer `ToolCallLoop`) | Shipped in `1.3.0` on Mellivor One assistant evidence — see [ADR-0028](../adr/0028-provider-tool-calling-and-execution-tool-loop.md) |
 
 The approved v1.2.0 line contains only Sprint 32 LocalProvider and its release
 validation; it does not define a broader capability roadmap. `LocalProvider`
