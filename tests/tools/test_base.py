@@ -95,3 +95,24 @@ def test_execute_runs_directly() -> None:
 
     assert result.success is True
     assert result.payload == {"x": 1}
+
+
+def test_input_schema_defaults_to_empty_object_without_override() -> None:
+    """Tools written against the v1.0 contract need no change."""
+    from mellivor_kernel.tools import BaseTool
+
+    class _Minimal(BaseTool):
+        id = "minimal"  # type: ignore[assignment]
+        name = "Minimal"  # type: ignore[assignment]
+        version = "1.0.0"  # type: ignore[assignment]
+        description = "A tool with no declared inputs."  # type: ignore[assignment]
+        capabilities = frozenset()  # type: ignore[assignment]
+        permissions = frozenset()  # type: ignore[assignment]
+
+        def validate(self, request):  # type: ignore[no-untyped-def]
+            return None
+
+        def execute(self, context, request):  # type: ignore[no-untyped-def]
+            raise NotImplementedError
+
+    assert _Minimal().input_schema == {"type": "object"}
