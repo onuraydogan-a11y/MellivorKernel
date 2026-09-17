@@ -3,8 +3,10 @@ Messages API.
 
 The reference implementation for concrete kernel providers -- it proves
 `BaseProvider`'s existing contract requires no changes to support a real
-LLM. Scope is deliberately minimal: synchronous request/response, plain
-text prompts, plain text responses. No streaming, tool calling, vision,
+LLM. Scope: synchronous request/response, plain text prompts or a
+message list, plain text responses, and tool calling (the provider
+describes tools and reports the model's calls; it never executes them --
+see :mod:`mellivor_kernel.providers.tool_calling`). No streaming, vision,
 JSON mode, prompt caching, MCP, or batch execution.
 
 Optional dependency: requires the ``anthropic`` package
@@ -16,15 +18,18 @@ never uses Claude never needs the dependency installed.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from typing import cast
 
 import anthropic
+from anthropic.types import MessageParam, ToolParam
 
 from mellivor_kernel.providers.base import BaseProvider
 from mellivor_kernel.providers.capabilities import ProviderCapabilities
 from mellivor_kernel.providers.configuration import ProviderConfiguration
 from mellivor_kernel.providers.exceptions import ProviderConfigurationError, ProviderError
 from mellivor_kernel.providers.health import ProviderHealthCheck
+from mellivor_kernel.providers.tool_calling import ToolCall, ToolSpec
 
 _DEFAULT_MAX_TOKENS = 1024
 """Anthropic's Messages API requires ``max_tokens`` on every request. The
@@ -127,10 +132,11 @@ class ClaudeProvider(BaseProvider):
     def capabilities(self) -> ProviderCapabilities:
         """The capabilities this provider supports.
 
-        All ``False``/``None`` beyond the defaults: this sprint's scope is
-        synchronous plain-text request/response only.
+        ``supports_tool_calls`` is ``True``: :meth:`invoke` forwards
+        ``request["tools"]`` to the model and reports its calls in
+        ``response["tool_calls"]``. Everything else stays at the defaults.
         """
-        return ProviderCapabilities()
+        return ProviderCapabilities(supports_tool_calls=True)
 
     def check_health(self) -> ProviderHealthCheck:
         """Check whether the Anthropic API is currently reachable and usable.
@@ -154,17 +160,24 @@ class ClaudeProvider(BaseProvider):
         return ProviderHealthCheck(healthy=True, provider_name=self.name)
 
     def invoke(self, request: Mapping[str, object]) -> Mapping[str, object]:
-        """Send a plain text prompt to Claude and return its plain text response.
+        """Send a prompt or a conversation to Claude and return its response.
 
         Args:
-            request: ``{"prompt": str}`` (required); optionally
-                ``{"system": str}`` for a system prompt, and
-                ``{"max_tokens": int}`` to override the default of
-                ``1024``.
+            request: Exactly one of ``{"prompt": str}`` (a single user
+                turn) or ``{"messages": [...]}`` (a conversation in the
+                provider-neutral shape: each message has ``role`` and
+                ``content``, where content is a string or a sequence of
+                ``text``/``tool_use``/``tool_result`` blocks). Optionally
+                ``{"system": str}``, ``{"max_tokens": int}`` (default
+                ``1024``), and ``{"tools": [ToolSpec, ...]}`` to offer
+                tools the model may call.
 
         Returns:
-            ``{"text": str, "model": str, "stop_reason": str | None,
-            "input_tokens": int, "output_tokens": int}``.
+            ``{"text": str, "tool_calls": tuple[ToolCall, ...], "model": str,
+            "stop_reason": str | None, "input_tokens": int,
+            "output_tokens": int}``. ``text`` is the concatenated text
+            content and may be empty when the model only asked for tools;
+            ``tool_calls`` is empty when it did not.
 
         Raises:
             ClaudeProviderError: If ``request`` is malformed, or for any
@@ -176,28 +189,27 @@ class ClaudeProvider(BaseProvider):
             ClaudeTimeoutError: If the request times out.
             ClaudeConnectionError: If the request cannot be completed due
                 to a network failure.
-            ClaudeResponseError: If the response contains no text content.
+            ClaudeResponseError: If the response contains neither text nor
+                a tool call.
         """
-        prompt = request.get("prompt")
-        if not isinstance(prompt, str) or not prompt.strip():
-            raise ClaudeProviderError("request['prompt'] must be a non-empty string.")
-
+        messages = self._messages_from(request)
         system = request.get("system")
         if system is not None and not isinstance(system, str):
             raise ClaudeProviderError("request['system'] must be a string, if provided.")
-
         max_tokens = request.get("max_tokens", _DEFAULT_MAX_TOKENS)
         if not isinstance(max_tokens, int) or isinstance(max_tokens, bool) or max_tokens <= 0:
             raise ClaudeProviderError(
                 "request['max_tokens'] must be a positive integer, if provided."
             )
+        tools = self._tools_from(request)
 
         try:
             message = self._client.messages.create(
                 model=self._model,
                 max_tokens=max_tokens,
-                messages=[{"role": "user", "content": prompt}],
+                messages=cast(list[MessageParam], messages),
                 system=system if system is not None else anthropic.omit,
+                tools=cast(list[ToolParam], tools) if tools is not None else anthropic.omit,
             )
         except anthropic.AuthenticationError as exc:
             raise ClaudeAuthenticationError(
@@ -213,13 +225,101 @@ class ClaudeProvider(BaseProvider):
         text = "".join(
             block.text for block in message.content if isinstance(block, anthropic.types.TextBlock)
         )
-        if not text:
+        tool_calls = tuple(
+            ToolCall(
+                id=block.id,
+                name=block.name,
+                arguments=block.input if isinstance(block.input, Mapping) else {},
+            )
+            for block in message.content
+            if isinstance(block, anthropic.types.ToolUseBlock)
+        )
+        if not text and not tool_calls:
             raise ClaudeResponseError("Anthropic response contained no text content.")
-
         return {
             "text": text,
+            "tool_calls": tool_calls,
             "model": message.model,
             "stop_reason": message.stop_reason,
             "input_tokens": message.usage.input_tokens,
             "output_tokens": message.usage.output_tokens,
         }
+
+    @staticmethod
+    def _messages_from(request: Mapping[str, object]) -> list[dict[str, object]]:
+        """Resolve ``prompt`` or ``messages`` into Anthropic message dicts."""
+        prompt = request.get("prompt")
+        messages = request.get("messages")
+        if prompt is not None and messages is not None:
+            raise ClaudeProviderError("request must carry either 'prompt' or 'messages', not both.")
+        if messages is None:
+            if not isinstance(prompt, str) or not prompt.strip():
+                raise ClaudeProviderError("request['prompt'] must be a non-empty string.")
+            return [{"role": "user", "content": prompt}]
+        if not isinstance(messages, Sequence) or isinstance(messages, str | bytes) or not messages:
+            raise ClaudeProviderError("request['messages'] must be a non-empty sequence.")
+        return [_to_anthropic_message(entry) for entry in messages]
+
+    @staticmethod
+    def _tools_from(request: Mapping[str, object]) -> list[dict[str, object]] | None:
+        """Resolve ``tools`` into Anthropic tool definitions, if offered."""
+        tools = request.get("tools")
+        if tools is None:
+            return None
+        if not isinstance(tools, Sequence) or isinstance(tools, str | bytes):
+            raise ClaudeProviderError("request['tools'] must be a sequence of ToolSpec.")
+        definitions: list[dict[str, object]] = []
+        for spec in tools:
+            if not isinstance(spec, ToolSpec):
+                raise ClaudeProviderError("request['tools'] entries must be ToolSpec instances.")
+            definitions.append(
+                {
+                    "name": spec.name,
+                    "description": spec.description,
+                    "input_schema": dict(spec.input_schema),
+                }
+            )
+        return definitions or None
+
+
+def _to_anthropic_message(entry: object) -> dict[str, object]:
+    """Translate one provider-neutral message into the Anthropic wire shape."""
+    if not isinstance(entry, Mapping):
+        raise ClaudeProviderError("each message must be a mapping with 'role' and 'content'.")
+    role = entry.get("role")
+    if role not in ("user", "assistant"):
+        raise ClaudeProviderError("message['role'] must be 'user' or 'assistant'.")
+    content = entry.get("content")
+    if isinstance(content, str):
+        if not content.strip():
+            raise ClaudeProviderError("message['content'] must not be blank.")
+        return {"role": role, "content": content}
+    if not isinstance(content, Sequence) or isinstance(content, str | bytes) or not content:
+        raise ClaudeProviderError("message['content'] must be a string or a non-empty block list.")
+    return {"role": role, "content": [_to_anthropic_block(block) for block in content]}
+
+
+def _to_anthropic_block(block: object) -> dict[str, object]:
+    if not isinstance(block, Mapping):
+        raise ClaudeProviderError("each content block must be a mapping.")
+    kind = block.get("type")
+    if kind == "text":
+        return {"type": "text", "text": str(block.get("text", ""))}
+    if kind == "tool_use":
+        arguments = block.get("input", {})
+        return {
+            "type": "tool_use",
+            "id": str(block.get("id", "")),
+            "name": str(block.get("name", "")),
+            "input": dict(arguments) if isinstance(arguments, Mapping) else {},
+        }
+    if kind == "tool_result":
+        result: dict[str, object] = {
+            "type": "tool_result",
+            "tool_use_id": str(block.get("tool_call_id", "")),
+            "content": str(block.get("content", "")),
+        }
+        if block.get("is_error"):
+            result["is_error"] = True
+        return result
+    raise ClaudeProviderError(f"unsupported content block type: {kind!r}.")

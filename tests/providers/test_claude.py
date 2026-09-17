@@ -116,7 +116,7 @@ def test_name_and_capabilities() -> None:
 
     assert provider.name == "claude"
     assert provider.capabilities.supports_streaming is False
-    assert provider.capabilities.supports_tool_calls is False
+    assert provider.capabilities.supports_tool_calls is True
 
 
 # -- successful completion -----------------------------------------------------
@@ -130,6 +130,7 @@ def test_successful_completion_returns_text_and_metadata() -> None:
 
     assert result == {
         "text": "hi there",
+        "tool_calls": (),
         "model": "claude-sonnet-5",
         "stop_reason": "end_turn",
         "input_tokens": 10,
@@ -137,6 +138,7 @@ def test_successful_completion_returns_text_and_metadata() -> None:
     }
     assert fake.messages.calls[0]["model"] == "claude-sonnet-5"
     assert fake.messages.calls[0]["messages"] == [{"role": "user", "content": "hello"}]
+    assert fake.messages.calls[0]["tools"] is anthropic.omit
 
 
 def test_successful_completion_forwards_system_prompt() -> None:
@@ -303,3 +305,230 @@ def test_check_health_reports_unhealthy_on_failure() -> None:
     assert report.healthy is False
     assert report.provider_name == "claude"
     assert "invalid x-api-key" in report.detail
+
+
+# --- tool calling ---------------------------------------------------------
+
+from anthropic.types import ToolUseBlock  # noqa: E402
+
+from mellivor_kernel.providers import ToolCall, ToolSpec  # noqa: E402
+
+
+def _make_tool_use_message(*blocks: object, stop_reason: str = "tool_use") -> Message:
+    return Message(
+        id="msg_2",
+        content=list(blocks),  # type: ignore[arg-type]
+        model="claude-sonnet-5",
+        role="assistant",
+        stop_reason=stop_reason,  # type: ignore[arg-type]
+        type="message",
+        usage=Usage(input_tokens=10, output_tokens=5),
+    )
+
+
+def test_tools_are_forwarded_in_anthropic_shape() -> None:
+    fake = _FakeClient(response=_make_message())
+    provider = ClaudeProvider(_config(), client=_as_client(fake))
+    spec = ToolSpec(
+        name="echo",
+        description="Echo.",
+        input_schema={"type": "object", "properties": {"message": {"type": "string"}}},
+    )
+
+    provider.invoke({"prompt": "hello", "tools": [spec]})
+
+    assert fake.messages.calls[0]["tools"] == [
+        {
+            "name": "echo",
+            "description": "Echo.",
+            "input_schema": {"type": "object", "properties": {"message": {"type": "string"}}},
+        }
+    ]
+
+
+def test_tool_use_blocks_become_tool_calls() -> None:
+    fake = _FakeClient(
+        response=_make_tool_use_message(
+            TextBlock(text="let me check", type="text"),
+            ToolUseBlock(id="toolu_1", name="echo", input={"message": "x"}, type="tool_use"),
+        )
+    )
+    provider = ClaudeProvider(_config(), client=_as_client(fake))
+
+    result = provider.invoke({"prompt": "hello", "tools": [ToolSpec(name="echo", description="E")]})
+
+    assert result["text"] == "let me check"
+    assert result["stop_reason"] == "tool_use"
+    assert result["tool_calls"] == (
+        ToolCall(id="toolu_1", name="echo", arguments={"message": "x"}),
+    )
+
+
+def test_tool_use_only_response_is_not_an_error() -> None:
+    fake = _FakeClient(
+        response=_make_tool_use_message(
+            ToolUseBlock(id="toolu_1", name="echo", input={}, type="tool_use")
+        )
+    )
+    provider = ClaudeProvider(_config(), client=_as_client(fake))
+
+    result = provider.invoke({"prompt": "hello"})
+
+    assert result["text"] == ""
+    assert len(result["tool_calls"]) == 1  # type: ignore[arg-type]
+
+
+def test_messages_replace_prompt_and_blocks_are_translated() -> None:
+    fake = _FakeClient(response=_make_message("done"))
+    provider = ClaudeProvider(_config(), client=_as_client(fake))
+    messages = [
+        {"role": "user", "content": "hi"},
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "checking"},
+                {"type": "tool_use", "id": "toolu_1", "name": "echo", "input": {"message": "x"}},
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_call_id": "toolu_1",
+                    "content": "ok",
+                    "is_error": False,
+                }
+            ],
+        },
+    ]
+
+    result = provider.invoke({"messages": messages})
+
+    assert result["text"] == "done"
+    sent = fake.messages.calls[0]["messages"]
+    assert sent == [
+        {"role": "user", "content": "hi"},
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "checking"},
+                {"type": "tool_use", "id": "toolu_1", "name": "echo", "input": {"message": "x"}},
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "toolu_1", "content": "ok"}],
+        },
+    ]
+
+
+def test_error_tool_result_sets_is_error_on_the_wire() -> None:
+    fake = _FakeClient(response=_make_message("done"))
+    provider = ClaudeProvider(_config(), client=_as_client(fake))
+
+    provider.invoke(
+        {
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_call_id": "t",
+                            "content": "no",
+                            "is_error": True,
+                        }
+                    ],
+                },
+            ]
+        }
+    )
+
+    block = fake.messages.calls[0]["messages"][1]["content"][0]  # type: ignore[index]
+    assert block["is_error"] is True
+
+
+@pytest.mark.parametrize(
+    "request_",
+    [
+        {"prompt": "a", "messages": [{"role": "user", "content": "a"}]},
+        {"messages": []},
+        {"messages": "not a list"},
+        {"messages": [{"role": "system", "content": "a"}]},
+        {"messages": [{"role": "user", "content": "   "}]},
+        {"messages": [{"role": "user", "content": [{"type": "image"}]}]},
+        {"prompt": "a", "tools": "echo"},
+        {"prompt": "a", "tools": [{"name": "echo"}]},
+    ],
+)
+def test_malformed_messages_and_tools_are_rejected(request_: dict[str, object]) -> None:
+    provider = ClaudeProvider(_config(), client=_as_client(_FakeClient(response=_make_message())))
+
+    with pytest.raises(ClaudeProviderError):
+        provider.invoke(request_)
+
+
+def test_end_to_end_with_tool_call_loop() -> None:
+    """The neutral shape round-trips: loop → Claude → tool → Claude → answer."""
+    from dataclasses import dataclass
+
+    from mellivor_kernel.core import Kernel, ServiceContainer, get_logger
+    from mellivor_kernel.execution import (
+        Dispatcher,
+        ExecutionContext,
+        ExecutionEngine,
+        ToolCallLoop,
+    )
+    from mellivor_kernel.providers import ProviderRegistry
+    from mellivor_kernel.tools import ToolRegistry
+    from mellivor_kernel.tools.builtin import EchoTool
+
+    @dataclass
+    class _Settings:
+        log_level: str = "INFO"
+
+    class _SequencedMessages(_FakeMessages):
+        def __init__(self, responses: list[Message]) -> None:
+            super().__init__()
+            self._responses = responses
+
+        def create(self, **kwargs: object) -> Message:
+            self.calls.append(kwargs)
+            return self._responses.pop(0)
+
+    fake = _FakeClient()
+    fake.messages = _SequencedMessages(
+        [
+            _make_tool_use_message(
+                ToolUseBlock(id="toolu_1", name="echo", input={"message": "ping"}, type="tool_use")
+            ),
+            _make_message("echoed ping"),
+        ]
+    )
+    provider = ClaudeProvider(_config(), client=_as_client(fake))
+    tools = ToolRegistry()
+    tools.register(EchoTool())
+    providers = ProviderRegistry()
+    providers.register(provider)
+    engine = ExecutionEngine(Dispatcher(tools, providers))
+    settings = _Settings()
+    context = ExecutionContext(
+        configuration=settings,  # type: ignore[arg-type]
+        logger=get_logger("test_claude_e2e"),
+        runtime=Kernel(settings),  # type: ignore[arg-type]
+        services=ServiceContainer(),
+    )
+
+    result = ToolCallLoop(engine, tools, providers).run(
+        "claude", [{"role": "user", "content": "echo ping"}], ["echo"], context
+    )
+
+    assert result.success is True
+    assert result.text == "echoed ping"
+    assert result.tool_calls[0].success is True
+    second_call = fake.messages.calls[1]["messages"]
+    assert second_call[-1]["content"][0]["type"] == "tool_result"  # type: ignore[index]
+    assert second_call[-1]["content"][0]["tool_use_id"] == "toolu_1"  # type: ignore[index]
+    assert "ping" in second_call[-1]["content"][0]["content"]  # type: ignore[index]
